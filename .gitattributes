@@ -1,2 +1,2 @@
-patches/*.patch -whitespace
+patches/*.patch -whitespace text eol=lf
 *.cmd text eol=crlf
