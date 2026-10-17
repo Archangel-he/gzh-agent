@@ -1,0 +1,1616 @@
+diff --git a/packages/client/locale/src/locales/en.ts b/packages/client/locale/src/locales/en.ts
+index b649bbc3..308cb64b 100644
+--- a/packages/client/locale/src/locales/en.ts
++++ b/packages/client/locale/src/locales/en.ts
+@@ -2,6 +2,7 @@ import type { CommonKey } from './zh.ts'
+ 
+ /** en base dictionary for the common namespace, checked complete against the zh key set. */
+ export const en = {
++  'sidebar.reveal': 'Show conversation history',
+   'ok': 'OK',
+   'cancel': 'Cancel',
+   'close': 'Close',
+diff --git a/packages/client/locale/src/locales/zh.ts b/packages/client/locale/src/locales/zh.ts
+index 11ff789b..86d8e4e9 100644
+--- a/packages/client/locale/src/locales/zh.ts
++++ b/packages/client/locale/src/locales/zh.ts
+@@ -1,5 +1,6 @@
+ /** zh base dictionary for the common namespace: cross-feature standard words. */
+ export const zh = {
++  'sidebar.reveal': '显示历史对话',
+   'ok': '确定',
+   'cancel': '取消',
+   'close': '关闭',
+diff --git a/packages/client/ui-agent-preset/README.i18n.yaml b/packages/client/ui-agent-preset/README.i18n.yaml
+index 6027efa5..56aa63c6 100644
+--- a/packages/client/ui-agent-preset/README.i18n.yaml
++++ b/packages/client/ui-agent-preset/README.i18n.yaml
+@@ -21,8 +21,8 @@
+   en: a90bf7539dbce636
+   zh: d77c1fecac2c6a4b
+ /deepseek-ai-dsh-client-ui-agent-preset/further-exploration:
+-  en: bbae8d79844bc481
+-  zh: 4302107fd1f460e6
++  en: 822a5945098846c7
++  zh: 9ec186820b528f6e
+ /deepseek-ai-dsh-client-ui-agent-preset/model-experience:
+   en: ff77436515de40ff
+   zh: 6c6a23f85ba318bc
+diff --git a/packages/client/ui-agent-preset/README.md b/packages/client/ui-agent-preset/README.md
+index fdade6a4..6f5bed3c 100644
+--- a/packages/client/ui-agent-preset/README.md
++++ b/packages/client/ui-agent-preset/README.md
+@@ -57,6 +57,8 @@ Entering Creator selects `cordis` for the receiving blank Session without changi
+ - [Cordis](../../../docs/cordis-primer.md) — Plugin configuration and lifecycle.
+ 
+ <a id="model-experience"></a>
++Bloop builds omit the read-only conversation-header mode label; preset execution and settings remain available.
++
+ ## Model Experience
+ 
+ Indirectly, through the selected preset, whose plugins own model-visible capabilities.
+diff --git a/packages/client/ui-agent-preset/README.zh.md b/packages/client/ui-agent-preset/README.zh.md
+index eacce417..76fee755 100644
+--- a/packages/client/ui-agent-preset/README.zh.md
++++ b/packages/client/ui-agent-preset/README.zh.md
+@@ -57,6 +57,8 @@ kind: "package-reference"
+ - [Cordis](../../../docs/cordis-primer.zh.md) — 插件配置与生命周期。
+ 
+ <a id="model-experience"></a>
++Bloop 构建隐藏对话标题旁只读的模式名称，预设执行和设置继续可用。
++
+ ## 模型体验
+ 
+ 通过选定的 preset 间接影响模型，其插件拥有模型可见能力。
+diff --git a/packages/client/ui-agent-preset/src/client/AgentPresetLabel.tsx b/packages/client/ui-agent-preset/src/client/AgentPresetLabel.tsx
+index 26fdcfcb..276a4941 100644
+--- a/packages/client/ui-agent-preset/src/client/AgentPresetLabel.tsx
++++ b/packages/client/ui-agent-preset/src/client/AgentPresetLabel.tsx
+@@ -52,10 +52,10 @@ export function AgentPresetLabel({
+   useEffect(() => {
+     // Deployments that compose no presets never label anything, so the roster
+     // is only worth a request once a session reports one.
+-    if (preset !== undefined) void load()
++    if (preset !== undefined && process.env.DSH_CLIENT_BLOOP !== '1') void load()
+   }, [preset, load])
+ 
+-  if (preset === undefined) return null
++  if (preset === undefined || process.env.DSH_CLIENT_BLOOP === '1') return null
+ 
+   const option = options.find(entry => entry.id === preset)
+   const text = option === undefined ? undefined : presetDisplayText(option, t)
+diff --git a/packages/client/ui-agent-preset/tests/components.client.spec.tsx b/packages/client/ui-agent-preset/tests/components.client.spec.tsx
+index 79cc930e..cc7ae62c 100644
+--- a/packages/client/ui-agent-preset/tests/components.client.spec.tsx
++++ b/packages/client/ui-agent-preset/tests/components.client.spec.tsx
+@@ -382,6 +382,14 @@ describe('the chip introduce cue', () => {
+ })
+ 
+ describe('the session-header label', () => {
++  it('omits the read-only mode label in Bloop without requesting the roster', () => {
++    vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++    try {
++      const { view, load } = renderLabel({ blank: false, projectionValues: { agentPreset: 'standard' } })
++      expect(view.container.firstChild).toBeNull()
++      expect(load).not.toHaveBeenCalled()
++    } finally { vi.unstubAllEnvs() }
++  })
+   it('names the preset the session runs, and never offers a switch', async () => {
+     const { load } = renderLabel({
+       blank: false,
+diff --git a/packages/client/ui-conversation/README.i18n.yaml b/packages/client/ui-conversation/README.i18n.yaml
+index 3b74b55d..d5601448 100644
+--- a/packages/client/ui-conversation/README.i18n.yaml
++++ b/packages/client/ui-conversation/README.i18n.yaml
+@@ -26,6 +26,12 @@
+ /deepseek-ai-dsh-client-ui-conversation/temporary-composer-entries:
+   en: bb1244310f5c0382
+   zh: 824b84077432b559
++/deepseek-ai-dsh-client-ui-conversation/single-directory-desktop-builds:
++  en: b0d22d2d369a7609
++  zh: 34d47268e04d24d8
++/deepseek-ai-dsh-client-ui-conversation/bloop-companion:
++  en: 898bcffd6eee18fe
++  zh: 93452c79803fa554
+ /deepseek-ai-dsh-client-ui-conversation/model-experience:
+   en: e0a05b73ba3e4318
+   zh: dc85ab8433bb4456
+diff --git a/packages/client/ui-conversation/README.md b/packages/client/ui-conversation/README.md
+index 1a0cb88b..21d8109e 100644
+--- a/packages/client/ui-conversation/README.md
++++ b/packages/client/ui-conversation/README.md
+@@ -167,6 +167,16 @@ The selector must be a pure function of the owner currency. Its non-null return
+ `conversation.input.activity` hosts one control between the model selector and Send. Its `onActiveChange` callback expands that control across the toolbar and hides ordinary accessory controls and the context meter while preserving the editor and submit action. Closing the activity restores those controls with context details closed. The empty hero dock remains collapsed when it has no content. The occupant releases expansion on unmount and owns any activity-specific feedback.
+ 
+ <a id="model-experience"></a>
++## Single-directory desktop builds
++
++In [single-directory desktop builds](../ui-workspace/README.md), blank conversations omit the workspace selector while retaining the Composer, model selection, attachments, and agent preset controls.
++
++## Bloop companion
++
++Bloop builds replace the blank headline and preset row with an animated companion and one of twelve locale-owned greetings. The same avatar stays mounted while the first message moves it from above the composer to the upper-left corner; its animation clock continues. The composer omits the permission chip while permission enforcement and slash commands remain active. The system reduced-motion preference freezes the decorative animation. The bundled bloub engine retains its MIT license and source revision in `src/client/bloop/LICENSE.bloub` and `NOTICE.bloub`; the React adapter cycles twelve poses with SVG rings and particles. A gentle continuous sway keeps held poses visibly animated. Position and scale share one 1.3-second compositor transform. The Bloop conversation omits the session title, view tabs, and header utility controls; delivered-file cards still open previews.
++
++The Bloop attachment button uses a paperclip icon and opens the file picker directly; it keeps the standard upload validation and error reporting.
++
+ ## Model Experience
+ 
+ None, as this package renders browser state and sends user-admitted inputs through Session Controller APIs without constructing model requests.
+diff --git a/packages/client/ui-conversation/README.zh.md b/packages/client/ui-conversation/README.zh.md
+index ccef5969..54cbee67 100644
+--- a/packages/client/ui-conversation/README.zh.md
++++ b/packages/client/ui-conversation/README.zh.md
+@@ -167,6 +167,16 @@ selector 必须是 owner currency 的纯函数。非 null 返回值作为 `match
+ `conversation.input.activity` 在模型选择器与发送按钮之间承载一个控件。其 `onActiveChange` 回调将控件展开至整条工具栏并隐藏普通辅助控件和上下文用量按钮，同时保留编辑器与提交按钮。关闭活动后恢复这些控件，上下文详情保持关闭。首页输入框下方没有内容时，该区域保持收起。占用者在卸载时释放展开状态，并拥有活动专属反馈。
+ 
+ <a id="model-experience"></a>
++## 固定目录桌面构建
++
++在[固定目录桌面构建](../ui-workspace/README.zh.md)中，空白对话隐藏工作区选择器，保留输入框、模型选择、附件和 Agent 预设控件。
++
++## Bloop 伙伴
++
++Bloop 构建将空白对话的欢迎标题和预设行替换为动画伙伴及十二条本地化问候之一。首条消息发出时，同一只伙伴从输入框上方移至左上角，动画时钟继续运行。输入框隐藏权限选择按钮，权限执行与斜杠命令继续生效。系统减少动态效果设置会暂停装饰动画。打包的 bloub 引擎在 `src/client/bloop/LICENSE.bloub` 与 `NOTICE.bloub` 中保留 MIT 许可和来源版本；React 适配循环十二种姿态，并绘制 SVG 环绕轨迹与粒子。持续轻摆让停留姿态仍有明显动态；平移和缩放合并为 1.3 秒的合成层变换。Bloop 对话隐藏会话标题、视图标签和顶部工具，文件交付卡片仍可打开预览。
++
++Bloop 的附件按钮使用回形针图标，点击直接打开文件选择窗口；继续使用标准上传校验和错误提示。
++
+ ## 模型体验
+ 
+ 无，因为本包渲染浏览器状态，并通过 Session Controller API 发送用户确认提交的输入，而不构造模型请求。
+diff --git a/packages/client/ui-conversation/src/client/bloop/BloopCompanion.module.css b/packages/client/ui-conversation/src/client/bloop/BloopCompanion.module.css
+new file mode 100644
+index 00000000..0420de0c
+--- /dev/null
++++ b/packages/client/ui-conversation/src/client/bloop/BloopCompanion.module.css
+@@ -0,0 +1,15 @@
++.companion {
++  position: fixed;
++  left: 0;
++  top: 0;
++  z-index: 12;
++  width: 220px;
++  height: 220px;
++  color: var(--dsw-alias-label-primary);
++  pointer-events: none;
++  transition: transform 1300ms cubic-bezier(.45,0,.2,1);
++  will-change: transform;
++}
++.companion svg { width: 100%; height: 100%; overflow: visible; animation: bloopSway 3.6s ease-in-out infinite; }
++@keyframes bloopSway { 0%, 100% { transform: translateY(3px) rotate(-3deg); } 50% { transform: translateY(-4px) rotate(3deg); } }
++@media (prefers-reduced-motion: reduce) { .companion { transition: none; } .companion svg { animation: none; } }
+diff --git a/packages/client/ui-conversation/src/client/bloop/BloopCompanion.tsx b/packages/client/ui-conversation/src/client/bloop/BloopCompanion.tsx
+new file mode 100644
+index 00000000..6e287411
+--- /dev/null
++++ b/packages/client/ui-conversation/src/client/bloop/BloopCompanion.tsx
+@@ -0,0 +1,76 @@
++import { useEffect, useId, useLayoutEffect, useState } from 'react'
++import { BotEngine } from './bloub.js'
++import css from './BloopCompanion.module.css'
++
++const MONTAGE = ['idle', 'wink', 'egg', 'orbit', 'wide', 'hexagon', 'swirl', 'play', 'thinking', 'notify', 'comet', 'burst'] as const
++
++/** One continuously mounted avatar; changing its position never resets its clock. */
++function BloopAvatar() {
++  const [engine] = useState(() => new BotEngine(100, 'idle'))
++  const [frame, setFrame] = useState(() => engine.sample(0))
++  const mask = useId().replaceAll(':', '')
++  useEffect(() => {
++    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
++    let request = 0
++    let origin: number | undefined
++    let last = -Infinity
++    let previous = ''
++    const animate = (now: number): void => {
++      origin ??= now
++      const elapsed = (now - origin) / 1000
++      const state = MONTAGE[Math.floor(elapsed / 2.8) % MONTAGE.length]!
++      if (state !== previous) { engine.setState(state, elapsed); previous = state }
++      if (now - last >= 15) { setFrame(engine.sample(elapsed)); last = now }
++      request = requestAnimationFrame(animate)
++    }
++    request = requestAnimationFrame(animate)
++    return () => { cancelAnimationFrame(request) }
++  }, [engine])
++  const dots = frame.dots.map((dot, i) => dot.d
++    ? <path key={i} d={dot.d} transform={`translate(${dot.x} ${dot.y}) rotate(${dot.rot ?? 0}) scale(100)`} fill={dot.color ?? 'currentColor'} opacity={dot.opacity} />
++    : <circle key={i} cx={dot.x} cy={dot.y} r={dot.r} fill={dot.color ?? 'currentColor'} opacity={dot.opacity} />)
++  return <svg viewBox="-158 -158 316 316" aria-hidden="true" focusable="false" data-bloop-pose={engine.state}>
++    <defs><mask id={mask} maskUnits="userSpaceOnUse" x="-158" y="-158" width="316" height="316">
++      <path d={frame.bodyPath} fill="white" />
++      {frame.eyes.map((eye, i) => <path key={i} d={eye.d} transform={eye.matrix} opacity={eye.alpha} fill="black" />)}
++      {frame.notch && <circle cx={frame.notch.x} cy={frame.notch.y} r={frame.notch.r} fill="black" />}
++    </mask>
++      {frame.arcs.map(arc => <linearGradient key={arc.id} id={`${mask}-${arc.id}`} gradientUnits="userSpaceOnUse" x1={arc.grad.x1} y1={arc.grad.y1} x2={arc.grad.x2} y2={arc.grad.y2}>
++        {arc.grad.stops.map((color, i) => <stop key={i} offset={i / (arc.grad.stops.length - 1)} stopColor={color} />)}
++      </linearGradient>)}
++    </defs>
++    <g fill="none" strokeLinecap="round">{frame.arcs.map(arc => <path key={arc.id} d={arc.back} stroke={`url(#${mask}-${arc.id})`} strokeWidth={arc.width} opacity={arc.opacity} />)}</g>
++    {frame.dotsBehind && dots}
++    <path d={frame.bodyPath} fill="var(--dsw-alias-bg-base)" opacity={frame.bodyAlpha} />
++    <path d={frame.bodyPath} fill="currentColor" opacity={frame.bodyAlpha} mask={`url(#${mask})`} />
++    {!frame.dotsBehind && dots}
++    {frame.notif && <circle cx={frame.notif.x} cy={frame.notif.y} r={frame.notif.r} fill="#2496e8" />}
++    <g fill="none" strokeLinecap="round">{frame.arcs.map(arc => <path key={arc.id} d={arc.front} stroke={`url(#${mask}-${arc.id})`} strokeWidth={arc.width} opacity={arc.opacity} />)}</g>
++  </svg>
++}
++
++/**
++ * Keep the animated companion above the blank composer, then ease it to the window corner.
++ * @param props.hero - whether this conversation still awaits its first message.
++ * @param props.anchor - reserved avatar seat above the greeting and composer.
++ * @returns the persistent decorative avatar.
++ */
++export function BloopCompanion({ hero, anchor }: { hero: boolean; anchor: HTMLDivElement | null }) {
++  const [point, setPoint] = useState({ x: window.innerWidth / 2, y: window.innerHeight / 2 - 110 })
++  useLayoutEffect(() => {
++    const measure = (): void => {
++      const rect = anchor?.getBoundingClientRect()
++      setPoint(hero && rect !== undefined ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : { x: 136, y: 78 })
++    }
++    measure()
++    const observer = new ResizeObserver(measure)
++    if (anchor !== null) {
++      observer.observe(anchor)
++      if (anchor.parentElement?.parentElement) observer.observe(anchor.parentElement.parentElement)
++    }
++    window.addEventListener('resize', measure)
++    return () => { observer.disconnect(); window.removeEventListener('resize', measure) }
++  }, [hero, anchor])
++  return <div className={css.companion} data-bloop-companion={hero ? 'hero' : 'corner'}
++    style={{ transform: `translate3d(${point.x}px, ${point.y}px, 0) translate(-50%, -50%) scale(${hero ? 1 : .48})` }}><BloopAvatar /></div>
++}
+diff --git a/packages/client/ui-conversation/src/client/bloop/LICENSE.bloub b/packages/client/ui-conversation/src/client/bloop/LICENSE.bloub
+new file mode 100644
+index 00000000..d63275eb
+--- /dev/null
++++ b/packages/client/ui-conversation/src/client/bloop/LICENSE.bloub
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2026 Jérémy Perret
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/packages/client/ui-conversation/src/client/bloop/NOTICE.bloub b/packages/client/ui-conversation/src/client/bloop/NOTICE.bloub
+new file mode 100644
+index 00000000..19fae4cf
+--- /dev/null
++++ b/packages/client/ui-conversation/src/client/bloop/NOTICE.bloub
+@@ -0,0 +1,5 @@
++bloub by Jérémy Perret
++https://github.com/jeremy-prt/bloub
++Source commit: b4bb3c1b5f93c7b87a2e8d620f667c4093d97749
++Bundled src/bot/engine.ts and its imports with esbuild; no Vue runtime.
++Code: MIT. This upstream recreation is unaffiliated with x.ai; its code license does not grant rights to third-party trademarks or designs.
+diff --git a/packages/client/ui-conversation/src/client/bloop/bloub.d.ts b/packages/client/ui-conversation/src/client/bloop/bloub.d.ts
+new file mode 100644
+index 00000000..63da7e2c
+--- /dev/null
++++ b/packages/client/ui-conversation/src/client/bloop/bloub.d.ts
+@@ -0,0 +1,31 @@
++/** Public subset consumed from the bundled MIT bloub animation engine. */
++export interface BotFrame {
++  bodyPath: string
++  bodyAlpha: number
++  eyes: { d: string; matrix: string; alpha: number }[]
++  dots: { x: number; y: number; r: number; opacity: number; color?: string; depth?: number; d?: string; rot?: number }[]
++  dotsBehind: boolean
++  arcs: { id: string; front: string; back: string; width: number; opacity: number; grad: { x1: number; y1: number; x2: number; y2: number; stops: string[] } }[]
++  notif: { x: number; y: number; r: number } | null
++  notch: { x: number; y: number; r: number } | null
++}
++/** Upstream poses used by the continuous Bloop montage. */
++export type BotState = 'idle' | 'wink' | 'wide' | 'egg' | 'hexagon' | 'orbit' | 'swirl' | 'play' | 'comet' | 'thinking' | 'notify' | 'burst'
++/** Clock-free upstream SVG animation engine. */
++export class BotEngine {
++  /** Current upstream animation pose. */
++  readonly state: BotState
++  constructor(radius: number, state: BotState)
++  /**
++   * Blend into an upstream animation state without resetting elapsed time.
++   * @param state - next avatar pose.
++   * @param time - absolute animation time in seconds.
++   */
++  setState(state: BotState, time: number): void
++  /**
++   * Sample deterministic SVG geometry at an absolute time.
++   * @param time - animation time in seconds.
++   * @returns body and eye paths for this frame.
++   */
++  sample(time: number): BotFrame
++}
+diff --git a/packages/client/ui-conversation/src/client/bloop/bloub.js b/packages/client/ui-conversation/src/client/bloop/bloub.js
+new file mode 100644
+index 00000000..978b0405
+--- /dev/null
++++ b/packages/client/ui-conversation/src/client/bloop/bloub.js
+@@ -0,0 +1,2 @@
++/*! bloub — Copyright (c) 2026 Jérémy Perret. MIT; see LICENSE.bloub. */
++var M=Math.PI*2,y=(e,n=0,t=1)=>e<n?n:e>t?t:e,m=(e,n,t)=>e+(n-e)*t,w={easeOutCubic:e=>1-(1-e)**3,easeInOutCubic:e=>e<.5?4*e**3:1-(-2*e+2)**3/2,easeOutQuint:e=>1-(1-e)**5};function v(e,n,t=0){let r=e/n*M;return .55*Math.sin(r+t)+.3*Math.sin(2*r+t*1.7+1.1)+.15*Math.sin(3*r+t*2.3+2.4)}function X(e){let n=e>>>0;return()=>{n=n+1831565813>>>0;let t=Math.imul(n^n>>>15,1|n);return t=t+Math.imul(t^t>>>7,61|t)^t,((t^t>>>14)>>>0)/4294967296}}var p=e=>Math.round(e*100)/100;function ue(e,n=.55,t=.62){let r=(e%360+360)%360,o=(1-Math.abs(2*t-1))*n,i=o*(1-Math.abs(r/60%2-1)),s=t-o/2,[a,c,l]=r<60?[o,i,0]:r<120?[i,o,0]:r<180?[0,o,i]:r<240?[0,i,o]:r<300?[i,0,o]:[o,0,i],u=h=>Math.round((h+s)*255).toString(16).padStart(2,"0");return`#${u(a)}${u(c)}${u(l)}`}function _e(e,n,t,r,o=1){let i=e.phase+n*e.speed*M,s=Math.cos(e.tilt),a=Math.sin(e.tilt),c=Math.sqrt(Math.max(0,1-e.k*e.k)),l=64,u=e.sweep*M,h="",f="",b=null;for(let S=0;S<=l;S++){let x=i+S/l*u,E=Math.cos(x),A=Math.sin(x),O=e.a*(E*s+A*-a*e.k)+e.cx,D=e.a*(E*a+A*s*e.k)+e.cy,_=e.a*A*c<0,T=p(O*t),U=p(D*t),Q=_!==b?"M":"L";_?f+=`${Q}${T} ${U}`:h+=`${Q}${T} ${U}`,b=_}let d=Math.cos(e.tilt)*e.a*t,P=Math.sin(e.tilt)*e.a*t;return{id:r,front:h,back:f,width:e.width*t,opacity:o,grad:{x1:p(e.cx*t-d),y1:p(e.cy*t-P),x2:p(e.cx*t+d),y2:p(e.cy*t+P),stops:[ue(e.hue),ue(e.hue+e.hueSpan*.5),ue(e.hue+e.hueSpan)]}}}var F=X(659918),pe=Array.from({length:6},(e,n)=>({a:1.3+F()*.1,k:.05+F()*.4,tilt:n/6*Math.PI+F()*.5,speed:3+F()*.7,phase:F()*M,sweep:.6+F()*.25,hue:n*360/6+F()*30,hueSpan:60+F()*60,width:.05+F()*.012,cx:0,cy:.1})),Te=Array.from({length:4},(e,n)=>({a:.78+n*.2,k:.05+n*.02,tilt:-.62+n*.05,speed:.3,phase:.06*n,sweep:.4,hue:95+n*62,hueSpan:100,width:.05,cx:0,cy:-.12})),he=[-.557,-.013,.532],me=.165,ye=1.25,ke=X(48879),bt=Array.from({length:5},(e,n)=>({birth:n*.2,angle:ke()*M,rho:.58+ke()*.18}));function ze(e,n){let t=[];for(let r of bt){let o=e-r.birth;if(o<0||o>.62)continue;let i=r.rho*Math.pow(.75,o*10),s=r.angle+o*100*Math.PI/180;t.push({x:Math.cos(s)*i*n,y:Math.sin(s)*i*n,r:(.04+.028*y(o/.55))*n,depth:y(1-i/.8),opacity:y(o/.06)*y((.62-o)/.08)})}return t}var Re=X(49383),Be=Array.from({length:4},(e,n)=>{let t=n-1.5;return{a:.85*(1+t*.03),k:.15/.85*(1+t*.16),tilt:34*Math.PI/180+t*.035,speed:210/360,phase:-n*.045+Re()*.012,sweep:.34,hue:n*85+Re()*20,hueSpan:80,width:.095,cx:0,cy:0}}),Ce=.129;var $e=-42,fe=1.003,Fe=.15,Le=1.14,ve=.054;var q=15.46,K=.186,W=.412,Z={yaw:28.49,pitch:28.62,roll:-13},ne=e=>e*Math.PI/180;function re(e,n,t){let r=Math.cos(t),o=Math.sin(t);return[[e[0]*r+n[0]*o,e[1]*r+n[1]*o,e[2]*r+n[2]*o],[n[0]*r-e[0]*o,n[1]*r-e[1]*o,n[2]*r-e[2]*o]]}function oe(e,n,t=q){let r=[0,0,1],o=[1,0,0],i=[0,1,0];[r,o]=re(r,o,ne(e.yaw)),[i,r]=re(i,r,ne(e.pitch)),[o,i]=re(o,i,ne(e.roll));let s=a=>{let[c,l]=re(r,o,ne(t*a));return{x:c[0]*n,y:c[1]*n,a:l[0],b:l[1],c:i[0],d:i[1],depth:c[2]}};return[s(-1),s(1)]}var De=X(24301),Ne=(()=>{let e=[],n=1.4;for(;n<900;)e.push(n),n+=1.9+De()*2.7,De()<.18&&(e.push(n),n+=.24);return e})(),dt=.18;function xt(e){for(let n=0;n<Ne.length;n++){let t=Ne[n];if(e<t)break;let r=(e-t)/dt;if(r>=0&&r<=1)return r<.45?1-r/.45:(r-.45)/.55}return 1}function Ye(e,n={}){let{wander:t=1,blink:r=!0,float:o=!0}=n;return{dYaw:(v(e,11.3,.4)*5.5+v(e,3.7,2.1)*1.6)*t,dPitch:(v(e,9.1,1.3)*4.2+v(e,4.3,.7)*1.3)*t,dRoll:v(e,13.7,3.2)*2.2*t,lid:r?xt(e):1,driftX:o?v(e,7.9,1.9)*.006:0,driftY:o?v(e,5.3,.3)*.007:0,breath:o?1+Math.sin(e/3.4*Math.PI*2)*.005:1}}function He(e){return .06+.94*y(e)}var C=(e,n,t=0,r=1)=>({w:e,h:n,tilt:t,open:r}),z=(e,n,t=0,r=1)=>[C(e,n,t,r),C(e,n,-t,r)],be=[{id:"neutre",gaze:{...Z},split:q,eyes:[C(K,W),C(K,W)]},{id:"attentif",gaze:{yaw:4,pitch:5,roll:-4},split:16,eyes:z(.21,.44)},{id:"surpris",gaze:{yaw:3,pitch:-3,roll:0},split:19,eyes:z(.45,.47)},{id:"excite",gaze:{yaw:6,pitch:-14,roll:0},split:19.5,eyes:z(.4,.56,-10)},{id:"heureux",gaze:{yaw:5,pitch:9,roll:0},split:17,eyes:z(.27,.17,14)},{id:"hilare",gaze:{yaw:4,pitch:14,roll:0},split:18,eyes:z(.34,.13,20)},{id:"colere",gaze:{yaw:3,pitch:7,roll:0},split:17,eyes:z(.34,.15,30)},{id:"triste",gaze:{yaw:3,pitch:-13,roll:0},split:16,eyes:z(.22,.4,-28)},{id:"effraye",gaze:{yaw:2,pitch:-20,roll:0},split:20.5,eyes:z(.4,.6)},{id:"mefiant",gaze:{yaw:12,pitch:6,roll:-6},split:16,eyes:[C(.21,.4),C(.22,.15)]},{id:"confus",gaze:{yaw:-14,pitch:3,roll:8},split:16.5,eyes:[C(.2,.44,-18),C(.28,.17,14)]},{id:"curieux",gaze:{yaw:16,pitch:-9,roll:-15},split:16.5,eyes:[C(.24,.46,-8),C(.2,.38,-8)]},{id:"fier",gaze:{yaw:5,pitch:17,roll:0},split:17,eyes:z(.3,.15,18)},{id:"timide",gaze:{yaw:-19,pitch:-14,roll:-7},split:14,eyes:z(.17,.3)},{id:"blase",gaze:{yaw:-22,pitch:2,roll:0},split:16,eyes:z(.3,.12)},{id:"somnolent",gaze:{yaw:6,pitch:-9,roll:-3},split:16,eyes:z(.2,.42,0,.42)}],Wt=new Map(be.map(e=>[e.id,e]));var Ge=(e,n,t)=>({w:m(e.w,n.w,t),h:m(e.h,n.h,t),tilt:m(e.tilt??0,n.tilt??0,t),open:m(e.open,n.open,t)});function Xe(e,n,t){return{id:n.id,gaze:{yaw:m(e.gaze.yaw,n.gaze.yaw,t),pitch:m(e.gaze.pitch,n.gaze.pitch,t),roll:m(e.gaze.roll,n.gaze.roll,t)},split:m(e.split,n.split,t),eyes:[Ge(e.eyes[0],n.eyes[0],t),Ge(e.eyes[1],n.eyes[1],t)]}}var Ve={egg:[.8369,.8424,.8497,.8585,.8674,.8775,.8878,.8983,.9089,.9185,.9288,.9374,.9445,.9504,.9543,.9559,.9555,.9519,.9466,.9389,.9302,.9193,.9085,.8969,.8852,.8734,.8625,.8513,.8411,.8325,.8243,.8179,.8137,.8112,.8102,.8128,.8178,.8262,.8374,.8518,.8702,.8922,.9169,.9446,.9741,1.0023,1.0267,1.0433,1.0481,1.0393,1.0216,.997,.9697,.9418,.9169,.8949,.876,.8604,.849,.8394,.8337,.8314,.8305,.8326],hexagon:[.921,.9282,.9441,.9706,.9984,1.0059,.9896,.9562,.929,.9124,.9047,.9058,.9157,.9349,.9642,.9873,.9882,.9665,.9336,.9105,.8968,.8918,.8955,.908,.9293,.9611,.982,.9812,.959,.9282,.9089,.8978,.8964,.9026,.9189,.9439,.9778,.999,.9964,.9713,.9439,.9274,.9196,.9206,.9308,.9502,.9799,1.0121,1.0226,1.0071,.9752,.951,.9366,.9316,.9351,.9485,.9711,1.0026,1.0213,1.0155,.9863,.9547,.9347,.9232],triangle:[.7819,.8211,.8747,.944,1.0223,1.096,1.1401,1.134,1.0808,1.0047,.9265,.8603,.8104,.773,.745,.7273,.7151,.7118,.7148,.7245,.7427,.768,.8037,.8518,.9148,.9876,1.0583,1.1073,1.1109,1.0667,.994,.9164,.8482,.7948,.7555,.7261,.7056,.6925,.6859,.6869,.6938,.7084,.7305,.7615,.804,.8595,.9311,1.0092,1.0791,1.1171,1.1054,1.0501,.9779,.905,.845,.799,.7656,.7413,.7258,.716,.7146,.7204,.733,.7528]};var de=Array.from({length:64},(e,n)=>n/64*M),se=de.map(Math.cos),ie=de.map(Math.sin);function ae(e,n={}){return{radii:[...Ve[e]],rot:0,cx:0,cy:0,sx:1,sy:1,...n}}function N(e,n={}){return{radii:new Array(64).fill(e),rot:0,cx:0,cy:0,sx:1,sy:1,...n}}function Ue(e,n,t,r){let o=r??{radii:new Array(64),rot:0,cx:0,cy:0,sx:1,sy:1};for(let s=0;s<64;s++)o.radii[s]=m(e.radii[s]??1,n.radii[s]??1,t);let i=n.rot-e.rot;for(;i>Math.PI;)i-=M;for(;i<-Math.PI;)i+=M;return o.rot=e.rot+i*t,o.cx=m(e.cx,n.cx,t),o.cy=m(e.cy,n.cy,t),o.sx=m(e.sx,n.sx,t),o.sy=m(e.sy,n.sy,t),o}function j(e,n,t=[]){let r=Math.cos(e.rot),o=Math.sin(e.rot);for(let i=0;i<64;i++){let s=e.radii[i]??1,a=s*(se[i]??0),c=s*(ie[i]??0),l=a*r-c*o,u=a*o+c*r,h=t[i]??{x:0,y:0};h.x=(l*e.sx+e.cx)*n,h.y=(u*e.sy+e.cy)*n,t[i]=h}return t.length=64,t}function Qe(e,n=1/6){let t=e.length;if(t<3)return"";let r=e[0],o=`M${p(r.x)} ${p(r.y)}`;for(let i=0;i<t;i++){let s=e[(i-1+t)%t],a=e[i],c=e[(i+1)%t],l=e[(i+2)%t],u=a.x+(c.x-s.x)*n,h=a.y+(c.y-s.y)*n,f=c.x-(l.x-a.x)*n,b=c.y-(l.y-a.y)*n;o+=`C${p(u)} ${p(h)} ${p(f)} ${p(b)} ${p(c.x)} ${p(c.y)}`}return`${o}Z`}function Y(e,n,t){let r=new Array(64).fill(0),o=e.length;for(let i=0;i<64;i++){let s=se[i]??0,a=ie[i]??0,c=0;for(let l=0;l<o;l++){let u=e[l],h=e[(l+1)%o],f=h.x-u.x,b=h.y-u.y,d=s*b-a*f;if(Math.abs(d)<1e-9)continue;let P=u.x-n,S=u.y-t,x=(P*b-S*f)/d,E=(P*a-S*s)/d;x>c&&E>=0&&E<=1&&(c=x)}r[i]=c}return r}function H(e,n,t,r,o,i,s=96){let a=r-e,c=o-n,l=Math.hypot(a,c)||1e-6,u=Math.atan2(c,a),h=Math.acos(Math.max(-1,Math.min(1,(t-i)/l))),f=[];for(let b=0;b<=s/2;b++){let d=u+h+(M-2*h)*b/(s/2);f.push({x:e+Math.cos(d)*t,y:n+Math.sin(d)*t})}for(let b=0;b<=s/2;b++){let d=u-h+2*h*b/(s/2);f.push({x:r+Math.cos(d)*i,y:o+Math.sin(d)*i})}return f}function ce(e,n){let t=e.length,r=(n/M%1+1)%1*t,o=Math.floor(r);return m(e[o%t]??1,e[(o+1)%t]??1,r-o)}function qe(e,n=1,t=1){return de.map((r,o)=>{let i=Math.abs((se[o]??0)/n)**e,s=Math.abs((ie[o]??0)/t)**e;return(i+s)**(-1/e)})}function Ke(e){let n=new Array(64).fill(0);for(let t=0;t<64;t++){let r=se[t]??0,o=ie[t]??0,i=0;for(let s of e){let a=r*s.x+o*s.y,c=a*a-(s.x*s.x+s.y*s.y-s.r*s.r);if(c<0)continue;let l=a+Math.sqrt(c);l>i&&(i=l)}n[t]=i}return n}function gt(e,n,t=10){let r=e.length,o=[],i=(s,a)=>{let c=a.x-s.x,l=a.y-s.y,u=Math.hypot(c,l)||1;return Math.atan2(-c/u,l/u)};for(let s=0;s<r;s++){let a=e[(s-1+r)%r],c=e[s],l=e[(s+1)%r],u=i(a,c),f=i(c,l)-u;for(;f>Math.PI;)f-=M;for(;f<-Math.PI;)f+=M;for(let b=0;b<=t;b++){let d=u+f*b/t;o.push({x:c.x+Math.cos(d)*n,y:c.y+Math.sin(d)*n})}}return o}function xe(e,n,t,r=0){let o=r*Math.PI/180,i=Array.from({length:e},(s,a)=>{let c=o+a/e*M;return{x:Math.cos(c)*(n-t),y:Math.sin(c)*(n-t)}});return Y(gt(i,t),0,0)}function We(e,n=1){if(e.length<3)return"";let t="";for(let r=0;r<e.length;r++){let o=e[r];t+=`${r===0?"M":"L"}${p(o.x*n)} ${p(o.y*n)}`}return`${t}Z`}function Ze(e,n){let t=Math.max(e,.01)/2,r=Math.max(n,.01)/2,o=Math.min(t,r);return`M${p(-t)} ${p(-r+o)}A${p(o)} ${p(o)} 0 0 1 ${p(-t+o)} ${p(-r)}L${p(t-o)} ${p(-r)}A${p(o)} ${p(o)} 0 0 1 ${p(t)} ${p(-r+o)}L${p(t)} ${p(r-o)}A${p(o)} ${p(o)} 0 0 1 ${p(t-o)} ${p(r)}L${p(-t+o)} ${p(r)}A${p(o)} ${p(o)} 0 0 1 ${p(-t)} ${p(r-o)}Z`}function le(e,n=1){let t=Math.max(...e);if(t<=0)return e;let r=n/t;return e.map(o=>o*r)}var Pt=Array.from({length:64},(e,n)=>n/64*Math.PI*2),Mt=le(Pt.map(e=>1+.075*Math.cos(2*e+.5)+.035*Math.cos(3*e+2.1)),1.02),Et=le(Ke([{x:-.44,y:.2,r:.54},{x:.46,y:.2,r:.5},{x:.02,y:.3,r:.6},{x:-.24,y:-.3,r:.48},{x:.3,y:-.24,r:.44}]),1.02),St=le(Y(H(0,.28,.66,0,-.96,.05),0,0),1.04),At=Y(H(-.42,0,.62,.42,0,.62),0,0),ge=[{id:"cercle",radii:new Array(64).fill(1)},{id:"galet",radii:Mt},{id:"squircle",radii:le(qe(4.2),1.15)},{id:"capsule",radii:At},{id:"triangle",radii:xe(3,1.12,.34,-90)},{id:"hexagone",radii:xe(6,1.04,.26,0)},{id:"nuage",radii:Et},{id:"goutte",radii:St}],on=new Map(ge.map(e=>[e.id,e]));var It=[{id:"encre",hex:"#0a0a0c"},{id:"brun",hex:"#8b5e3c"},{id:"rouge",hex:"#e8483f"},{id:"orange",hex:"#f08a24"},{id:"ambre",hex:"#f0b429"},{id:"vert",hex:"#3ecf8e"},{id:"turquoise",hex:"#2fbfa0"},{id:"bleu",hex:"#3b93f0"},{id:"violet",hex:"#8b5cf6"},{id:"rose",hex:"#e152b0"},{id:"gris",hex:"#a3a3a3"},{id:"creme",hex:"#f1efe9"}],sn=new Map(It.map(e=>[e.id,e]));var G=(e,n)=>[{w:e,h:n,open:1},{w:e,h:n,open:1}];function R(e={}){return{sil:N(1),offX:0,offY:0,gaze:{...Z},split:q,eyes:G(K,W),eyeAlpha:1,bodyAlpha:1,dots:[],arcs:[],notif:null,dotsBehind:!1,...e}}var tt=-.1875,wt=Y(H(0,-.505,.132,0,.13,.075),0,tt),Ot=Y(H(0,-.2535,.1345,0,.2535,.1345),0,0),kt=(e={})=>({radii:[...wt],rot:0,cx:0,cy:tt,sx:1,sy:1,...e}),Rt=(e={})=>({radii:[...Ot],rot:0,cx:0,cy:0,sx:1,sy:1,...e}),_t=We(H(0,0,.118,0,.172,.012)),je=.213;function Je(e){return ae("triangle",{rot:e,cx:-je*Math.sin(e),cy:je*Math.cos(e)})}function et(e,n){let t=((e-n*.5)/1.5%1+1)%1,r=t<.5?.5-.5*Math.cos(t*M):0;return y(r*2)}var Pe=[{id:"idle",duration:2.4,morph:.45,blinkIn:!1,baseFace:!0,baseBody:!0,pose:()=>R()},{id:"thinking",duration:2.6,morph:.4,baseFace:!1,baseBody:!1,blinkIn:!0,pose:e=>{let n=et(e,1),t=.3+.7*w.easeOutCubic(y(e/.3));return R({sil:N(me*(1+(ye-1)*n),{cx:he[1]}),eyeAlpha:0,dots:[0,2].map(r=>{let o=et(e,r);return{x:he[r]*t,y:0,r:me*(1+(ye-1)*o),opacity:.55+.45*o}})})}},{id:"wink",duration:1.6,morph:.3,blinkIn:!0,baseFace:!1,baseBody:!0,pose:()=>R({gaze:{yaw:-5.37,pitch:4.55,roll:6.7},split:16.25,eyes:[{w:.236,h:.464,open:1},{w:.447,h:.089,open:1}]})},{id:"wide",duration:1.8,morph:.55,blinkIn:!0,baseFace:!1,baseBody:!0,pose:()=>R({gaze:{yaw:6.92,pitch:-21.96,roll:11.6},split:18.43,eyes:G(.356,.875)})},{id:"alert",duration:2.4,minDuration:2,morph:.45,baseFace:!1,baseBody:!1,blinkIn:!1,pose:e=>{let n=y(e/1.5),t=w.easeInOutCubic(n)*.82-.087,r=e>1.6?y((e-1.6)/.4):0,o=t*(1-r)+.1*r,i=Math.sin(e*2.5*M)*.005,s=17.7*Math.PI/180;return R({sil:Rt({rot:s,cx:o,cy:-.325-i}),eyeAlpha:0,dots:[{x:o-Math.sin(s)*.58,y:-.325+Math.cos(s)*.58+i*2.8,r:.118,d:_t,rot:s*180/Math.PI,opacity:1}]})}},{id:"notify",duration:2.2,morph:.5,blinkIn:!0,baseFace:!1,baseBody:!0,pose:e=>{let n=y(e/.45),t=1+(Le-1)*Math.sin(n*Math.PI)*(1-n*.35),r=Fe*(n<1?t:1),o=$e*Math.PI/180;return R({gaze:{yaw:-21.94,pitch:-5.82,roll:-12.2},split:18.89,eyes:G(.505,.498),notif:{x:Math.cos(o)*fe,y:Math.sin(o)*fe,r,notch:r+ve}})}},{id:"exclaim",duration:2,morph:.45,baseFace:!1,baseBody:!1,blinkIn:!1,pose:()=>R({sil:kt(),eyeAlpha:0,dots:[{x:-.012,y:.526,r:.113,opacity:1}]})},{id:"sleep",duration:2.4,morph:.5,baseFace:!1,baseBody:!1,blinkIn:!1,pose:e=>R({sil:N(.1585,{cy:.11+Math.sin(e*(M/.6))*.19}),eyeAlpha:0})},{id:"egg",duration:1.8,morph:.4,baseFace:!1,baseBody:!1,blinkIn:!0,pose:()=>R({sil:ae("egg"),gaze:{yaw:19.97,pitch:26.01,roll:-17.1},split:11.07,eyes:G(.164,.385)})},{id:"hexagon",duration:1.6,morph:.4,baseFace:!1,baseBody:!1,blinkIn:!0,pose:()=>R({sil:ae("hexagon"),gaze:{yaw:23.11,pitch:24.42,roll:-13.3},split:13.37,eyes:G(.177,.411)})},{id:"play",duration:2,morph:.5,baseFace:!1,baseBody:!1,blinkIn:!0,pose:e=>{let n=y(e/.35)*y((2.2-e)/.5);return R({sil:Je(0),gaze:{yaw:12,pitch:-8,roll:-6},split:15,eyes:G(.18,.34),arcs:Te.map((t,r)=>({id:`sw${r}`,seed:{...t,cx:.45-e*.42},t:e,opacity:n}))})}},{id:"orbit",duration:3.4,minDuration:2.5,morph:.6,baseFace:!1,baseBody:!1,blinkIn:!1,pose:e=>{let n=w.easeInOutCubic(y(e/.35)),t=-M*1.25*e*n,r=w.easeInOutCubic(y((e-1.6)/.9)),o=Je(t),i=N(1,{rot:t}),s={radii:o.radii.map((c,l)=>c+(i.radii[l]-c)*r),rot:t,cx:o.cx*(1-r),cy:o.cy*(1-r),sx:1,sy:1},a=y(e/.8)*y((3.6-e)/.9);return R({sil:s,gaze:{yaw:Z.yaw+Math.sin(e*6.5)*65*(1-r),pitch:-4+r*32,roll:-13},eyes:G(.18,.34+r*.07),arcs:pe.map((c,l)=>({id:`rg${l}`,seed:c,t:e,opacity:a*y((e-l*.13)/.3)}))})}},{id:"swirl",duration:1.3,minDuration:1.3,morph:.3,baseFace:!0,baseBody:!0,blinkIn:!0,pose:e=>R({arcs:pe.slice(0,3).map((n,t)=>({id:`sw${t}`,seed:n,t:e,opacity:y((e-t*.06)/.14)*y((1.22-e)/.34)}))})},{id:"burst",duration:2.6,minDuration:2.4,morph:.4,baseFace:!1,baseBody:!1,blinkIn:!1,pose:e=>{let n=1-.834*w.easeOutQuint(y(e/.7)),t=w.easeOutQuint(y((e-1.7)/.7));return R({sil:N(n+(1-n)*t),eyeAlpha:y((e-1.85)/.4),dots:ze(e,1),dotsBehind:!0})}},{id:"comet",duration:2.4,minDuration:2.4,morph:.45,baseFace:!1,baseBody:!1,blinkIn:!1,pose:e=>{let n=1-(1-Ce)*w.easeOutQuint(y(e/.55)),t=w.easeOutQuint(y((e-1.85)/.6)),r=y((e-.15)/.25)*y((1.95-e)/.3);return R({sil:N(n+(1-n)*t,{cy:Math.sin(y(e/1.7)*Math.PI)*.035}),eyeAlpha:y((e-2)/.35),arcs:Be.map((o,i)=>({id:`cm${i}`,seed:o,t:e,opacity:r}))})}}],V=new Map(Pe.map(e=>[e.id,e]));var L=100,nt=5.5+1.6,rt=4.2+1.3,Tt=.006,zt=.007;function ot(e,n,t){let r=[],o=oe(e.gaze,L,e.split);for(let i=0;i<2;i++){let s=o[i];if(s.depth<=.02)continue;let a=e.eyes[i],c=(a.tilt??0)*Math.PI/180,l=Math.cos(c),u=Math.sin(c),h=s.a*l+s.c*u,f=s.b*l+s.d*u,b=-s.a*u+s.c*l,d=-s.b*u+s.d*l,P=Math.max(a.w*L,.01)/2,S=Math.max(a.h*L,.01)/2,x=Math.min(P,S),E=S>P,A=E?S-x:P-x,O=ce(t,Math.atan2(s.y,s.x)-n.rot);r.push({x:s.x*O,y:s.y*O,ax:(E?b:h)*A,ay:(E?d:f)*A,r:x,m:[h,f,b,d]})}return r}function Bt(e,n,t,r,o){let i=r-n,s=o-t,a=i*i+s*s,c=1/0,l=0,u=0;for(let f=0;f<e.length;f++){let b=e[f],d=a>0?((b.x-n)*i+(b.y-t)*s)/a:0;d=d<0?0:d>1?1:d;let P=n+d*i-b.x,S=t+d*s-b.y,x=P*P+S*S;x<c&&(c=x,l=P,u=S)}let h=Math.sqrt(c);return{d:h,ux:h>1e-9?l/h:0,uy:h>1e-9?u/h:0}}var Ct=Math.hypot(Tt,zt)*L;function st(e,n,t,r){let o=1/0,i=0,s=0;for(let a of n){let c=a.x+t,l=a.y+r,u=Bt(e,c-a.ax,l-a.ay,c+a.ax,l+a.ay),[h,f,b,d]=a.m,P=a.r*Math.hypot(h*u.ux+f*u.uy,b*u.ux+d*u.uy)+Ct;u.d-P<o&&(o=u.d-P,i=u.ux,s=u.uy)}return{marge:o,ux:i,uy:s}}var it=12,$t=8;function Ft(e){if(!e.length)return{x:0,y:0};let n=(x,E)=>{let A=1/0;for(let O of e)A=Math.min(A,st(O.contour,O.empreintes,x,E).marge);return A},t=1/0;for(let x of e)t=Math.min(t,st(x.calContour,x.reference,0,0).marge);let r=0,o=0,i=e[0].empreintes;for(let x of i)r-=x.x/i.length,o-=x.y/i.length;let s=Math.max(.35*L,Math.hypot(r,o)*1.25);t=Math.min(t,n(r,o));let a=n(0,0);if(a>=t&&a>=0)return{x:0,y:0};let c=Math.max(t,0),l=0,u=0,h=1/0,f=0,b=0,d=a;for(let x=0;x<it;x++){let E=x/it*Math.PI*2,A=Math.cos(E),O=Math.sin(E);if(n(A*s,O*s)<c){for(let _ of[.3,.6,1]){let T=n(A*s*_,O*s*_);T>d&&(d=T,f=A*s*_,b=O*s*_)}continue}let D=0,B=s;for(let _=0;_<$t;_++){let T=(D+B)/2;n(A*T,O*T)>=c?B=T:D=T}B<h&&(h=B,l=A*B,u=O*B)}let P=h===1/0?f:l,S=h===1/0?b:u;return{x:+(P/L).toFixed(6),y:+(S/L).toFixed(6)}}function Lt(e,n,t){return e.baseFace&&t?{gaze:t.gaze,split:t.split,eyes:t.eyes}:{gaze:n.gaze,split:n.split,eyes:n.eyes}}function vt(e){let n=r=>JSON.stringify([r.gaze,r.split,r.eyes,r.sil.rot,r.sil.cx,r.sil.cy,r.sil.sx,r.sil.sy]);if(n(e.pose(0))===n(e.pose(e.duration)))return[0];let t=3;return Array.from({length:t},(r,o)=>o/(t-1)*e.duration)}function Dt(e,n,t){let r=[];for(let o of vt(e)){let i=e.pose(o),s=j({...i.sil,radii:n},L),a=j(i.sil,L),c=Lt(e,i,t),l=[];for(let u of[-nt,nt])for(let h of[-rt,rt])l.push({...c,gaze:{yaw:c.gaze.yaw+u,pitch:c.gaze.pitch+h,roll:c.gaze.roll}});for(let u of l)r.push({empreintes:ot(u,i.sil,n),reference:ot(u,i.sil,i.sil.radii),contour:s,calContour:a})}return Ft(r)}var Me={x:0,y:0},Ee=(e,n)=>`${e}|${n??""}`;function Nt(){return new Map(ge.map(e=>{let n=new Map;for(let t of Pe){if(!t.baseBody)continue;let r=t.baseFace?[null,...be]:[null];for(let o of r)n.set(Ee(t.id,o?.id??null),Dt(t,e.radii,o))}return[e.radii,n]}))}var Yt=Nt();function Se(e,n,t){if(!e)return Me;let r=Yt.get(e);return r?r.get(Ee(n,t))??r.get(Ee(n,null))??Me:Me}var Ae={yaw:0,pitch:0,mix:0,spin:0,wander:1},Ht=(e,n,t)=>({yaw:m(e.yaw,n.yaw,t),pitch:m(e.pitch,n.pitch,t),mix:m(e.mix,n.mix,t),spin:m(e.spin,n.spin,t),wander:m(e.wander,n.wander,t)}),at=(e,n,t)=>({w:m(e.w,n.w,t),h:m(e.h,n.h,t),open:m(e.open,n.open,t),tilt:m(e.tilt??0,n.tilt??0,t)});function ct(e,n,t){let r=1-t;return{sil:Ue(e.sil,n.sil,t),offX:m(e.offX,n.offX,t),offY:m(e.offY,n.offY,t),gaze:{yaw:m(e.gaze.yaw,n.gaze.yaw,t),pitch:m(e.gaze.pitch,n.gaze.pitch,t),roll:m(e.gaze.roll,n.gaze.roll,t)},split:m(e.split,n.split,t),eyes:[at(e.eyes[0],n.eyes[0],t),at(e.eyes[1],n.eyes[1],t)],eyeAlpha:m(e.eyeAlpha,n.eyeAlpha,t),bodyAlpha:m(e.bodyAlpha,n.bodyAlpha,t),dots:[...e.dots.map(o=>({...o,opacity:o.opacity*r})),...n.dots.map(o=>({...o,opacity:o.opacity*t}))],arcs:[...e.arcs.map(o=>({...o,id:`a${o.id}`,opacity:o.opacity*r})),...n.arcs.map(o=>({...o,id:`b${o.id}`,opacity:o.opacity*t}))],notif:t<.5?e.notif:n.notif,dotsBehind:t<.5?e.dotsBehind:n.dotsBehind}}var lt=class e{scale;cur;prev=null;departFige=null;tCur=0;tPrev=0;blinkAt=-10;pts=[];shape=null;shapePrev=null;shapeAt=-10;expr=null;exprPrev=null;exprAt=-10;look=Ae;lookPrev=Ae;lookAt=-10;lookMorph=.24;static SHAPE_MORPH=.45;static LOOK_MORPH=.24;constructor(n=100,t="idle",r=null,o=null){this.scale=n,this.cur=t,this.shape=r,this.expr=o}setExpression(n,t=0){n!==this.expr&&(this.exprPrev=this.expr,this.expr=n,this.exprAt=t)}exprAtTime(n){let t=this.expr,r=this.exprPrev;if(!t||!r)return t;let o=(n-this.exprAt)/e.SHAPE_MORPH;return o>=1?t:Xe(r,t,w.easeOutQuint(y(o)))}setShape(n,t=0){n!==this.shape&&(this.shapePrev=this.shape,this.shape=n,this.shapeAt=t)}shapeAtTime(n){let t=this.shape,r=this.shapePrev;if(!t||!r)return t;let o=(n-this.shapeAt)/e.SHAPE_MORPH;if(o>=1)return t;let i=w.easeOutQuint(y(o));return t.map((s,a)=>m(r[a]??s,s,i))}setLook(n,t,r=e.LOOK_MORPH){n&&!Number.isFinite(n.yaw+n.pitch+n.mix+n.spin+n.wander)||(this.lookPrev=this.lookAtTime(t),this.look=n??Ae,this.lookAt=t,this.lookMorph=r)}lookAtTime(n){let t=(n-this.lookAt)/this.lookMorph;return t>=1?this.look:Ht(this.lookPrev,this.look,w.easeOutQuint(y(t)))}posed(n,t,r,o){let i=n.pose(t);return n.baseBody&&r&&(i={...i,sil:{...i.sil,radii:r}}),n.baseFace&&o&&(i={...i,gaze:o.gaze,split:o.split,eyes:o.eyes}),i}decalageAtTime(n,t){let r=(i,s,a,c)=>{if(a===c)return c;let l=(n-i)/s;if(l>=1)return c;let u=w.easeOutQuint(y(l));return{x:m(a.x,c.x,u),y:m(a.y,c.y,u)}},o=i=>r(this.exprAt,e.SHAPE_MORPH,Se(i,t,this.exprPrev?.id??null),Se(i,t,this.expr?.id??null));return r(this.shapeAt,e.SHAPE_MORPH,o(this.shapePrev),o(this.shape))}get state(){return this.cur}reset(n,t){this.cur=n,this.prev=null,this.departFige=null,this.tCur=t,this.tPrev=t,this.blinkAt=-10}origine(n,t,r){if(this.departFige)return this.departFige;if(!this.prev)return null;let o=V.get(this.prev);return this.posed(o,Math.max(0,n-this.tPrev),t,r)}poseComposee(n){let t=V.get(this.cur),r=this.shapeAtTime(n),o=this.exprAtTime(n),i=this.posed(t,Math.max(0,n-this.tCur),r,o),s=n-this.tCur;if(s>=t.morph)return i;let a=this.origine(n,r,o);return a?ct(a,i,w.easeOutQuint(y(s/t.morph))):i}setState(n,t){if(n===this.cur)return;let r=V.get(this.cur).morph,o=this.prev!==null&&t-this.tCur<r;this.departFige=o?this.poseComposee(t):null,this.prev=this.cur,this.tPrev=this.tCur,this.cur=n,this.tCur=t,V.get(n)?.blinkIn&&(this.blinkAt=t)}sample(n){let t=this.scale,r=V.get(this.cur),o=this.shapeAtTime(n),i=this.exprAtTime(n),s=this.posed(r,Math.max(0,n-this.tCur),o,i),a=this.decalageAtTime(n,this.cur),c=n-this.tCur,l=c<r.morph?this.origine(n,o,i):null;if(l){let g=w.easeOutQuint(y(c/r.morph));s=ct(l,s,g);let $=this.prev;if($){let I=this.decalageAtTime(n,$);a={x:m(I.x,a.x,g),y:m(I.y,a.y,g)}}}let u=s.eyeAlpha>.01,h=this.lookAtTime(n),f=Ye(n,{wander:u?h.wander:0,blink:u}),b={yaw:m(s.gaze.yaw,h.yaw,h.mix)+f.dYaw-h.spin,pitch:m(s.gaze.pitch,h.pitch,h.mix)+f.dPitch,roll:s.gaze.roll+f.dRoll},d=y((n-this.blinkAt)/.2),P=d<1?Math.abs(d*2-1):1,S=Math.min(f.lid,P),x=s.offX+f.driftX,E=s.offY+f.driftY,A={...s.sil,cx:s.sil.cx+x,cy:s.sil.cy+E,sy:s.sil.sy*f.breath},O=Qe(j(A,t,this.pts)),D=(g,$)=>ce(s.sil.radii,Math.atan2($,g)-s.sil.rot),B=[];if(s.eyeAlpha>.01){let g=oe(b,t,s.split);for(let $=0;$<2;$++){let I=g[$];if(I.depth<=.02)continue;let J=s.eyes[$],Ie=D(I.x,I.y),we=(J.tilt??0)*Math.PI/180,ee=Math.cos(we),te=Math.sin(we),ht=I.a*ee+I.c*te,mt=I.b*ee+I.d*te,yt=-I.a*te+I.c*ee,ft=-I.b*te+I.d*ee,Oe=He(Math.min(S,J.open));B.push({d:Ze(J.w*t,J.h*t),matrix:`matrix(${p(ht)},${p(mt*Oe)},${p(yt)},${p(ft*Oe)},${p(I.x*Ie+(x+a.x)*t)},${p(I.y*Ie+(E+a.y)*t)})`,alpha:s.eyeAlpha*y(I.depth/.12)})}}let _=s.dots.filter(g=>g.opacity>.01&&g.r>5e-4).map(g=>({...g,x:(g.x+x)*t,y:(g.y+E)*t,r:g.r*t})),T=s.notif?D(s.notif.x,s.notif.y):1,U=s.notif?(s.notif.x*T+x)*t:0,Q=s.notif?(s.notif.y*T+E)*t:0,ut=s.notif?{x:U,y:Q,r:s.notif.r*t}:null,pt=s.notif?{x:U,y:Q,r:s.notif.notch*t}:null;return{bodyPath:O,bodyAlpha:s.bodyAlpha,eyes:B,dots:_,dotsBehind:s.dotsBehind,arcs:s.arcs.filter(g=>g.opacity>.01).map(g=>_e(g.seed,g.t,t,g.id,g.opacity)),notif:ut,notch:pt}}};export{lt as BotEngine};
+diff --git a/packages/client/ui-conversation/src/client/locales.ts b/packages/client/ui-conversation/src/client/locales.ts
+index f1f70807..a5afe96d 100644
+--- a/packages/client/ui-conversation/src/client/locales.ts
++++ b/packages/client/ui-conversation/src/client/locales.ts
+@@ -9,6 +9,18 @@ const PLAN_NEXT_ACTION_EN = 'describe your task to generate plan'
+ 
+ /** Simplified Chinese dictionary (the key-set source of truth). */
+ export const zh = {
++  'bloop.hello.0': '嗨，和 Bloop 一起，让想法成形。',
++  'bloop.hello.1': '给我一点文字，还你一点惊喜。',
++  'bloop.hello.2': '新的一页，交给 Bloop。',
++  'bloop.hello.3': '慢慢想，我们一起做。',
++  'bloop.hello.4': '今天，想把什么变得更好看？',
++  'bloop.hello.5': '你负责灵感，Bloop 负责陪跑。',
++  'bloop.hello.6': '一篇好文章，从这里开始。',
++  'bloop.hello.7': '把想法放进来，让它亮起来。',
++  'bloop.hello.8': '嗨，Bloop 已经准备好了。',
++  'bloop.hello.9': '先写一句，剩下的我们一起。',
++  'bloop.hello.10': '一点灵感，一点 Bloop 魔法。',
++  'bloop.hello.11': '留一点空白，给好想法。',
+   'shortcut.newline': '换行',
+   'shortcut.complementary': '使用互补的 Queue／Steer 方式',
+   'shortcut.slash': '打开命令菜单',
+@@ -389,6 +401,18 @@ export type ConversationKey = keyof typeof zh
+ 
+ /** English dictionary, checked complete against the zh key set. */
+ export const en = {
++  'bloop.hello.0': 'Hi, a little time with Bloop.',
++  'bloop.hello.1': 'Your words. A little wonder.',
++  'bloop.hello.2': 'A fresh page, a fresh idea.',
++  'bloop.hello.3': 'Take your time. I am right here.',
++  'bloop.hello.4': 'What shall we make today?',
++  'bloop.hello.5': 'You bring the spark. I will tag along.',
++  'bloop.hello.6': 'Good stories start somewhere.',
++  'bloop.hello.7': 'A small idea can go a long way.',
++  'bloop.hello.8': 'Hi, Bloop is ready when you are.',
++  'bloop.hello.9': 'One thought is all we need to start.',
++  'bloop.hello.10': 'Make room for a little magic.',
++  'bloop.hello.11': 'Let us make something worth reading.',
+   'shortcut.newline': 'New line',
+   'shortcut.complementary': 'Use the complementary Queue / Steer action',
+   'shortcut.slash': 'Open command menu',
+diff --git a/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx b/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx
+index 218082ae..afbade29 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx
++++ b/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx
+@@ -5,6 +5,9 @@ import { workspaceDisplayTitle } from '@deepseek-ai/dsh-api-workspace-controller
+ import type { ConversationContentProps, ConversationViewsProps, InputZone } from '../contract/slots.ts'
+ import { HeroShell, WorkspaceChip, workspaceLabel } from './EmptyHero.tsx'
+ import css from './ConversationRoot.module.css'
++import { BloopCompanion } from '../bloop/BloopCompanion.tsx'
++
++const BLOOP_GREETINGS = ['bloop.hello.0', 'bloop.hello.1', 'bloop.hello.2', 'bloop.hello.3', 'bloop.hello.4', 'bloop.hello.5', 'bloop.hello.6', 'bloop.hello.7', 'bloop.hello.8', 'bloop.hello.9', 'bloop.hello.10', 'bloop.hello.11'] as const
+ 
+ function ConversationSessionView({ renderSlot }: ConversationViewsProps) {
+   return renderSlot('conversation.session', {})
+@@ -25,6 +28,9 @@ export function ConversationContent(props: ConversationContentProps) {
+     useWorkspaces, useInput, useComposerBlock, renderSlot, renderSlotChain,
+     selectWorkspace, t, useFactorySlot,
+   } = props
++  const bloop = process.env.DSH_CLIENT_BLOOP === '1'
++  const [petAnchor, setPetAnchor] = useState<HTMLDivElement | null>(null)
++  const greeting = BLOOP_GREETINGS[Array.from(sessionId ?? '').reduce((sum, char) => sum + char.charCodeAt(0), 0) % BLOOP_GREETINGS.length]!
+   const session = useSession(snapshot => snapshot)
+   const Views = useFactorySlot('views', ConversationSessionView)
+   const WidthControls = useFactorySlot('widthControls', NoConversationWidthControls)
+@@ -109,14 +115,14 @@ export function ConversationContent(props: ConversationContentProps) {
+ 
+   const heroWorkspaceRow = (
+     <div className={css.heroWorkspaceRow}>
+-      <WorkspaceChip
++      {process.env.DSH_CLIENT_WORKSPACE_PATH === undefined && <WorkspaceChip
+         buttonRef={pickerAnchor}
+         label={chipTitle}
+         menuOpen={pickerOpen}
+         onClick={() => { setPickerOpen(open => !open) }}
+         t={t}
+-      />
+-      {renderSlot('conversation.hero.workspace', {
++      />}
++      {process.env.DSH_CLIENT_WORKSPACE_PATH === undefined && renderSlot('conversation.hero.workspace', {
+         open: pickerOpen,
+         anchorRef: pickerAnchor,
+         selectedId: pendingWorkspaceId ?? sessionWorkspace?.workspaceId,
+@@ -129,7 +135,7 @@ export function ConversationContent(props: ConversationContentProps) {
+         },
+         onClose: () => { setPickerOpen(false) },
+       })}
+-      {renderSlot('conversation.hero.agentPreset', {})}
++      {!bloop && renderSlot('conversation.hero.agentPreset', {})}
+       {sessionId === undefined ? null : <div className={css.heroOptions}>{renderSlot('conversation.hero.options', {})}</div>}
+     </div>
+   )
+@@ -163,8 +169,11 @@ export function ConversationContent(props: ConversationContentProps) {
+ 
+   const composerBar = (
+     <div className={clsx(css.composerStack, hero && css.composerHero)}>
+-      {hero && <HeroShell t={t} renderSlot={renderSlot} />}
+-      {hero && heroWorkspaceRow}
++      {hero && (bloop ? <div className={css.bloopWelcome}>
++        <div ref={setPetAnchor} className={css.bloopPetSeat} />
++        <p className={css.bloopGreeting}>{t(greeting)}</p>
++      </div> : <HeroShell t={t} renderSlot={renderSlot} />)}
++      {hero && !bloop && heroWorkspaceRow}
+       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
+       {inputBar}
+     </div>
+@@ -195,6 +204,7 @@ export function ConversationContent(props: ConversationContentProps) {
+       data-conversation-region="chat"
+       data-content-phase={phase}
+     >
++      {bloop && props.variant !== 'embedded' && <BloopCompanion hero={hero} anchor={petAnchor} />}
+       <div className={css.scrollBody} data-conversation-scroll="">
+         {sessionId === undefined ? null : <Views />}
+         {composerSeat}
+diff --git a/packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx b/packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx
+index 674b644a..abc5d68e 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx
++++ b/packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx
+@@ -44,7 +44,9 @@ export function ConversationMainPanel(props: ConversationSlotProps) {
+ 
+   return (
+     <div className={css.root} data-phase={phase}>
+-      {renderSlot('conversation.header', {})}
++      {process.env.DSH_CLIENT_BLOOP === '1'
++        ? <div className={css.bloopTitlebar} data-window-drag />
++        : renderSlot('conversation.header', {})}
+       {renderFactorySlot('conversation.content', {
+         variant: 'main',
+         phase,
+diff --git a/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css b/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
+index 070cb94a..783c2556 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
++++ b/packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css
+@@ -390,6 +390,11 @@ button.crumb:hover {
+   --dsh-composer-dock-inset: 8px;
+ }
+ 
++.bloopWelcome { text-align: center; margin-bottom: 16px; }
++.bloopTitlebar { height: 80px; flex: none; }
++.bloopPetSeat { height: 180px; }
++.bloopGreeting { margin: 8px 0 22px; color: var(--dsw-alias-label-secondary); font-size: 18px; font-weight: 400; line-height: 1.6; letter-spacing: -.2px; }
++
+ .embeddedBody {
+   overflow: hidden;
+   --dsh-chat-content-width: min(calc(100% - 32px), 920px);
+diff --git a/packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx b/packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx
+index ea3fd4ce..373cba35 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx
++++ b/packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx
+@@ -17,7 +17,7 @@ export function DefaultConversationViews({
+   const tabs = useConversationViews(value => value)
+   const inspectCall = useInspectCall(value => value)
+   const selectedId = useStore(s => s.view)
+-  const active = resolveActiveView(tabs, selectedId)
++  const active = resolveActiveView(tabs, process.env.DSH_CLIENT_BLOOP === '1' ? 'chat' : selectedId)
+   const session = useSession(s => s)
+   const conversation = useConversation(s => s)
+   const viewRequest = useStore(s => s.viewRequest ?? null)
+diff --git a/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx b/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx
+index ef957965..ed930d95 100644
+--- a/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx
++++ b/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx
+@@ -17,7 +17,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
+ import type { ChangeEvent, KeyboardEvent, MouseEvent } from 'react'
+ import clsx from 'clsx'
+ import {
+-  IconPlusOutlineMedium, IconWarningOutlineRegular, Toast, Tooltip,
++  IconPaperclipOutlineMedium, IconPlusOutlineMedium, IconWarningOutlineRegular, Toast, Tooltip,
+ } from '@deepseek-ai/dsh-client-ui-primitives'
+ // Type-only: the `plan` projection key merge (the TodoDock posture — the
+ // composer reads a host-computed value; the domain owns the key).
+@@ -52,6 +52,7 @@ export const InputBar = memo(function InputBar({
+   workspacePickerOpen = false, onRequestWorkspace,
+   placeholder, accessory,
+ }: InputBarProps) {
++  const bloop = process.env.DSH_CLIENT_BLOOP === '1'
+   const input = useInput(s => s)
+   const notice = useNotices(s => s)
+   const busyEnter = useBusyEnter(s => s)
+@@ -438,18 +439,18 @@ export const InputBar = memo(function InputBar({
+         />
+         <div ref={rowRef} className={css.row}>
+           <div className={css.tools} hidden={activity}>
+-            <Tooltip label={t('input.commands')} side="top" delayMs={500}>
++            <Tooltip label={t(bloop ? 'input.file' : 'input.commands')} side="top" delayMs={500}>
+               <button
+                 type="button"
+                 className={css.add}
+-                aria-label={t('input.commands')}
+-                aria-haspopup="listbox"
+-                aria-expanded={commandMenuOpen}
+-                disabled={locked || toggleCommandMenu === undefined}
++                aria-label={t(bloop ? 'input.file' : 'input.commands')}
++                aria-haspopup={bloop ? 'dialog' : 'listbox'}
++                aria-expanded={bloop ? undefined : commandMenuOpen}
++                disabled={bloop ? !canAcceptDrop || subagent !== null : locked || toggleCommandMenu === undefined}
+                 onMouseDown={keepFocus}
+-                onClick={onToggleCommandMenu}
++                onClick={bloop ? () => { fileInputRef.current?.click() } : onToggleCommandMenu}
+               >
+-                <IconPlusOutlineMedium size={14} />
++                {bloop ? <IconPaperclipOutlineMedium size={16} /> : <IconPlusOutlineMedium size={14} />}
+               </button>
+             </Tooltip>
+             <input
+@@ -461,7 +462,7 @@ export const InputBar = memo(function InputBar({
+               onChange={onPickFiles}
+             />
+             <div className={css.modes}>
+-              {sessionId === undefined ? null : renderSlot('conversation.input.permission', { locked })}
++              {sessionId === undefined || process.env.DSH_CLIENT_BLOOP === '1' ? null : renderSlot('conversation.input.permission', { locked })}
+               {sessionId === undefined ? null : renderSlot('conversation.input.plan', { locked })}
+             </div>
+             {input === undefined || sessionId === undefined
+diff --git a/packages/client/ui-conversation/tests/bloop-companion.client.spec.tsx b/packages/client/ui-conversation/tests/bloop-companion.client.spec.tsx
+new file mode 100644
+index 00000000..256f1bd3
+--- /dev/null
++++ b/packages/client/ui-conversation/tests/bloop-companion.client.spec.tsx
+@@ -0,0 +1,46 @@
++// @vitest-environment jsdom
++import { afterEach, expect, it, vi } from 'vitest'
++import { act, cleanup, render } from '@testing-library/react'
++import { BloopCompanion } from '../src/client/bloop/BloopCompanion.tsx'
++
++afterEach(() => { cleanup(); vi.unstubAllGlobals() })
++
++it('keeps the same animated SVG and clock when the first message docks the companion', () => {
++  let next = 0
++  const callbacks = new Map<number, FrameRequestCallback>()
++  const cancel = vi.fn((id: number) => { callbacks.delete(id) })
++  vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => { callbacks.set(++next, fn); return next })
++  vi.stubGlobal('cancelAnimationFrame', cancel)
++  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
++  const tick = (time: number): void => { act(() => {
++    const batch = [...callbacks.values()]; callbacks.clear(); batch.forEach(fn => { fn(time) })
++  }) }
++  const view = render(<BloopCompanion hero anchor={null} />)
++  const avatar = view.container.querySelector('svg')
++  tick(0)
++  tick(1000)
++  const before = avatar?.innerHTML
++  view.rerender(<BloopCompanion hero={false} anchor={null} />)
++  expect(view.container.querySelector('svg')).toBe(avatar)
++  expect(view.container.querySelector('[data-bloop-companion="corner"]')).not.toBeNull()
++  tick(3000)
++  expect(avatar?.innerHTML).not.toBe(before)
++  const poses = new Set<string | null>()
++  for (let time = 4000; time <= 36000; time += 2800) {
++    tick(time)
++    poses.add(avatar?.getAttribute('data-bloop-pose') ?? null)
++  }
++  expect(poses.size).toBeGreaterThanOrEqual(10)
++  view.unmount()
++  expect(callbacks.size).toBe(0)
++  expect(cancel).toHaveBeenCalled()
++})
++
++it('respects the system reduced-motion preference', () => {
++  const request = vi.fn()
++  vi.stubGlobal('requestAnimationFrame', request)
++  vi.stubGlobal('matchMedia', () => ({ matches: true }))
++  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
++  render(<BloopCompanion hero anchor={null} />)
++  expect(request).not.toHaveBeenCalled()
++})
+diff --git a/packages/client/ui-conversation/tests/input-bar.client.spec.tsx b/packages/client/ui-conversation/tests/input-bar.client.spec.tsx
+index 4ee04fe8..8fcb9534 100644
+--- a/packages/client/ui-conversation/tests/input-bar.client.spec.tsx
++++ b/packages/client/ui-conversation/tests/input-bar.client.spec.tsx
+@@ -1913,3 +1913,21 @@ it('places context usage below the composer and hides it until the activity clos
+   expect(view.getByRole('dialog', { name: '上下文已用' })).toBeTruthy()
+   expect(view.getByRole('button', { name: '发送消息' })).toBeTruthy()
+ })
++
++
++it('Bloop attachment button opens the file picker directly and keeps file intake', () => {
++  vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++  onTestFinished(() => { vi.unstubAllEnvs() })
++  const addFiles = vi.fn(() => null)
++  const toggleCommandMenu = vi.fn()
++  const { view } = bench({ addFiles, toggleCommandMenu })
++  const input = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
++  const open = vi.spyOn(input, 'click')
++  const button = view.getByRole('button', { name: zh['input.file'] })
++  fireEvent.click(button)
++  expect(open).toHaveBeenCalledOnce()
++  expect(toggleCommandMenu).not.toHaveBeenCalled()
++  const file = new File(['draft'], 'draft.txt', { type: 'text/plain' })
++  fireEvent.change(input, { target: { files: [file] } })
++  expect(addFiles).toHaveBeenCalledWith([file], undefined)
++})
+diff --git a/packages/client/ui-conversation/tests/skeleton.client.spec.tsx b/packages/client/ui-conversation/tests/skeleton.client.spec.tsx
+index bcd1005a..20f46de9 100644
+--- a/packages/client/ui-conversation/tests/skeleton.client.spec.tsx
++++ b/packages/client/ui-conversation/tests/skeleton.client.spec.tsx
+@@ -404,6 +404,31 @@ describe('Hero chrome', () => {
+ })
+ 
+ describe('ConversationRoot resident composer', () => {
++  it('replaces the Bloop blank headline with an animated companion and hides preset and access controls', () => {
++    vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++    vi.stubEnv('DSH_CLIENT_WORKSPACE_PATH', '/w/one')
++    try {
++      const b = mount(sessionSnapshotOf({ blank: true }))
++      expect(b.view.queryByTestId('hero-headline')).toBeNull()
++      expect(b.view.container.querySelector('[data-bloop-companion="hero"] svg')).not.toBeNull()
++      expect(b.slotCalls).not.toContain('conversation.hero.agentPreset')
++      expect(b.slotCalls).not.toContain('conversation.input.permission')
++      expect(b.slotCalls).not.toContain('conversation.header')
++      expect(b.view.getByRole('textbox')).toBeTruthy()
++    } finally { vi.unstubAllEnvs() }
++  })
++  it('keeps Bloop in Chat when an old conversation remembers Trajectory, without header controls', () => {
++    vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++    try {
++      const b = mount(sessionSnapshotOf())
++      act(() => { b.store.actions.setView('trajectory') })
++      expect(b.view.queryByRole('tablist')).toBeNull()
++      expect(b.view.getByTestId('view-chat')).toBeTruthy()
++      expect(b.view.queryByTestId('view-trajectory')).toBeNull()
++      expect(b.slotCalls).not.toContain('conversation.header')
++      expect(b.view.container.querySelector('[data-bloop-companion="corner"]')).not.toBeNull()
++    } finally { vi.unstubAllEnvs() }
++  })
+   it('keeps global header navigation without selecting a Session', () => {
+     const b = mount(sessionSnapshotOf(), [], undefined, { sessionId: undefined })
+     expect(b.view.container.querySelector('header')).not.toBeNull()
+@@ -536,6 +561,17 @@ describe('ConversationRoot resident composer', () => {
+     expect(seat?.contains(fallback)).toBe(true)
+   })
+ 
++  it('accepts a first message without exposing the workspace picker in a fixed-directory build', () => {
++    vi.stubEnv('DSH_CLIENT_WORKSPACE_PATH', '/w/one')
++    try {
++      const b = mount(sessionSnapshotOf({ blank: true }), [{ ...workspace('one'), sessionIds: [SID] }])
++      expect(b.slotCalls).not.toContain('conversation.hero.workspace')
++      expect(b.view.getByRole('textbox').hasAttribute('disabled')).toBe(false)
++      act(() => { b.wiring.setDraft('直接开始排版') })
++      expect(b.store.store.getSnapshot().draft).toEqual({ text: '直接开始排版', references: [] })
++    } finally { vi.unstubAllEnvs() }
++  })
++
+   it('hero phase: keeps sidebar controls accessible while hiding conversation chrome', () => {
+     const b = mount(
+       sessionSnapshotOf({ blank: true }),
+diff --git a/packages/client/ui-conversation/tsconfig.client.json b/packages/client/ui-conversation/tsconfig.client.json
+index 0339eebb..b10a3406 100644
+--- a/packages/client/ui-conversation/tsconfig.client.json
++++ b/packages/client/ui-conversation/tsconfig.client.json
+@@ -1,6 +1,7 @@
+ {
+   "extends": "../../../tsconfig.base.client.json",
+   "compilerOptions": {
++    "allowJs": true,
+     "rootDir": "src",
+     "outDir": "lib/types",
+     "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+diff --git a/packages/client/ui-layout/README.i18n.yaml b/packages/client/ui-layout/README.i18n.yaml
+index 4ad7481e..3c145ad8 100644
+--- a/packages/client/ui-layout/README.i18n.yaml
++++ b/packages/client/ui-layout/README.i18n.yaml
+@@ -29,6 +29,9 @@
+ /deepseek-ai-dsh-client-ui-layout/further-exploration:
+   en: 74de780b4592e28e
+   zh: a413f06f8ec406d0
++/deepseek-ai-dsh-client-ui-layout/bloop-hover-history:
++  en: eb50c4569330b455
++  zh: 0ea0e231ca1a492d
+ /deepseek-ai-dsh-client-ui-layout/model-experience:
+   en: 9a94a7197da60052
+   zh: 369a59ab63d050f1
+diff --git a/packages/client/ui-layout/README.md b/packages/client/ui-layout/README.md
+index 43c61b89..4f40f8ff 100644
+--- a/packages/client/ui-layout/README.md
++++ b/packages/client/ui-layout/README.md
+@@ -76,6 +76,10 @@ Read these pages when the layout surface is not enough. They move from the frame
+ -----
+ 
+ <a id="model-experience"></a>
++## Bloop hover history
++
++Bloop builds set `DSH_CLIENT_BLOOP=1`. History starts hidden and opens as an overlay at the left window edge without resizing the conversation. The edge supports keyboard focus, and Escape closes history. The existing sidebar shortcut also opens it. The system reduced-motion preference disables the slide transition.
++
+ ## Model Experience
+ 
+ None, as the layout shell manages browser viewing state; nothing here reaches a model request.
+diff --git a/packages/client/ui-layout/README.zh.md b/packages/client/ui-layout/README.zh.md
+index 9b426dcd..783b0a29 100644
+--- a/packages/client/ui-layout/README.zh.md
++++ b/packages/client/ui-layout/README.zh.md
+@@ -76,6 +76,10 @@ Windows Electron 的 `data-windows-titlebar` 标记在所有列上方预留顶
+ -----
+ 
+ <a id="model-experience"></a>
++## Bloop 悬浮历史
++
++Bloop 构建设置 `DSH_CLIENT_BLOOP=1`。历史默认隐藏，鼠标移到窗口左边缘时以覆盖层展开，不改变对话宽度。左边缘入口支持键盘聚焦，Escape 可收起历史，原有侧栏快捷键仍可打开它。系统减少动态效果设置会关闭滑动过渡。
++
+ ## 模型体验
+ 
+ 无。布局外壳管理浏览器查看状态；这里没有任何内容进入模型请求。
+diff --git a/packages/client/ui-layout/src/client/AppFrame.module.css b/packages/client/ui-layout/src/client/AppFrame.module.css
+index 5b71ebec..81600d9e 100644
+--- a/packages/client/ui-layout/src/client/AppFrame.module.css
++++ b/packages/client/ui-layout/src/client/AppFrame.module.css
+@@ -7,6 +7,23 @@
+   background: var(--dsw-alias-bg-base);
+ }
+ 
++.historyEdge {
++  position: absolute; inset: 48px auto 0 0; width: 56px; padding: 0; border: 0;
++  background: transparent; z-index: 24; cursor: pointer; -webkit-app-region: no-drag;
++}
++.historyEdge:focus-visible { outline: 2px solid var(--dsw-focus-ring-color); outline-offset: -2px; }
++.frame[data-bloop] > .sidebarCol {
++  position: absolute; inset: 0 auto 0 0; z-index: 25;
++  background: var(--dsw-specific-sidebar-fill); border-right: 1px solid var(--dsw-alias-border-l3);
++  box-shadow: 12px 0 40px rgb(0 0 0 / .12);
++  transition: translate 240ms ease, visibility 240ms;
++}
++.frame[data-bloop][data-sidebar-collapsed] > .sidebarCol { translate: -100% 0; visibility: hidden; }
++.frame[data-bloop]:not([data-sidebar-collapsed]) > .sidebarCol { translate: 0 0; visibility: visible; }
++.frame[data-bloop] > .centerCol { grid-column: 2; grid-row: 1; }
++.frame[data-bloop] > .rightbarCol { grid-column: 3; grid-row: 1; }
++@media (prefers-reduced-motion: reduce) { .frame[data-bloop] > .sidebarCol { transition: none; } }
++
+ /* Only a discrete collapse/expand toggle eases the tracks (the TSX holds
+    data-animating across the toggle on the deepsuite sider curve). Steady-state
+    tracks move only with the viewport, and those updates must land instantly:
+diff --git a/packages/client/ui-layout/src/client/AppFrame.tsx b/packages/client/ui-layout/src/client/AppFrame.tsx
+index 56149474..67081fd1 100644
+--- a/packages/client/ui-layout/src/client/AppFrame.tsx
++++ b/packages/client/ui-layout/src/client/AppFrame.tsx
+@@ -127,6 +127,8 @@ export function AppFrame({
+   t,
+ }: AppFrameProps) {
+   const layoutInfo = useStore(state => state.layoutInfo)
++  const bloop = process.env.DSH_CLIENT_BLOOP === '1'
++  const [sidebarRevealed, setSidebarRevealed] = useState(false)
+   const frameRef = useRef<HTMLDivElement | null>(null)
+   const viewport = layoutInfo.viewportWidth
+ 
+@@ -158,15 +160,15 @@ export function AppFrame({
+   }, [actions])
+ 
+   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
+-  const sidebarCollapsed = narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0
+-  const sidebarPreference = sidebarCollapsed
++  const sidebarCollapsed = bloop ? !(sidebarRevealed || layoutInfo.sidebar > 0) : narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0
++  const sidebarPreference = bloop || sidebarCollapsed
+     ? 0
+     : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
+   const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
+   // Desktop reopen controls occupy the frame's shell.leading seat (macOS) or
+   // the Windows caption row; neither platform keeps an icon rail.
+   const darwin = document.documentElement.dataset.platform === 'darwin'
+-  const collapsedWidth = darwin
++  const collapsedWidth = bloop || darwin
+     || document.documentElement.hasAttribute('data-windows-titlebar') ? 0 : SIDEBAR_COLLAPSED
+   // Opening on a narrow frame collapses the left sidebar. Eligibility must
+   // include that space before the occupant's first shown report arrives.
+@@ -240,9 +242,9 @@ export function AppFrame({
+   // the discrete decisions (track present, collapse state) and the drag base.
+   const rightbarMax = cols.rightbar === 0 ? 0 : clampWidth(rightbarPreference, RIGHTBAR_MIN, viewport * RIGHTBAR_MAX_RATIO)
+   const sidebar = useMemo(() => renderSlot('sidebar', {
+-    collapsed: sidebarCollapsed,
+-    width: cols.sidebar,
+-  }), [renderSlot, sidebarCollapsed, cols.sidebar])
++    collapsed: bloop ? false : sidebarCollapsed,
++    width: bloop ? SIDEBAR_DEFAULT : cols.sidebar,
++  }), [renderSlot, sidebarCollapsed, cols.sidebar, bloop])
+   const main = useMemo(() => (
+     <MainPanel usePanelInfo={usePanelInfo} renderSlot={renderSlot} />
+   ), [usePanelInfo, renderSlot])
+@@ -253,12 +255,17 @@ export function AppFrame({
+   // row (ui-sidebar). AppFrame.module.css publishes the matching
+   // --dsh-frame-leading-clearance under the same collapsed condition.
+   const leading = useMemo(() => renderSlot('shell.leading', {}), [renderSlot])
+-  const leadingMounted = darwin && sidebarCollapsed
++  const leadingMounted = darwin && sidebarCollapsed && !bloop
++  const closeBloopSidebar = (): void => {
++    setSidebarRevealed(false)
++    if (layoutInfo.sidebar > 0) actions.toggleSidebar()
++  }
+ 
+   return (
+     <div
+       ref={frameRef}
+       className={css.frame}
++      data-bloop={bloop || undefined}
+       style={{
+         ...(document.documentElement.hasAttribute('data-windows-titlebar')
+           ? { '--dsh-windows-sidebar-width': `${cols.sidebar}px` } : {}),
+@@ -277,7 +284,15 @@ export function AppFrame({
+         useSessions={useSessions}
+         usePanelInfo={usePanelInfo}
+       />
+-      <div className={css.sidebarCol}>
++      {bloop && <button type="button" className={css.historyEdge} aria-label={t('sidebar.reveal')}
++        onPointerEnter={() => { setSidebarRevealed(true) }} onFocus={() => { setSidebarRevealed(true) }}
++        onClick={() => { setSidebarRevealed(true) }} />}
++      <div className={css.sidebarCol}
++        style={bloop ? { width: SIDEBAR_DEFAULT } : undefined}
++        aria-hidden={bloop && sidebarCollapsed || undefined}
++        onPointerLeave={bloop ? closeBloopSidebar : undefined}
++        onKeyDown={bloop ? event => { if (event.key === 'Escape') closeBloopSidebar() } : undefined}
++        onBlurCapture={bloop ? event => { if (!event.currentTarget.contains(event.relatedTarget)) closeBloopSidebar() } : undefined}>
+         {sidebar}
+       </div>
+       <>
+@@ -298,7 +313,7 @@ export function AppFrame({
+         </div>
+       )}
+       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
+-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
++      {!bloop && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+       {layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
+         <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
+       )}
+diff --git a/packages/client/ui-layout/src/client/stores.ts b/packages/client/ui-layout/src/client/stores.ts
+index 3a53caf4..c6a27cc6 100644
+--- a/packages/client/ui-layout/src/client/stores.ts
++++ b/packages/client/ui-layout/src/client/stores.ts
+@@ -80,7 +80,7 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
+     init: (): LayoutState => ({
+       panelInfo: { activePanelId: null },
+       layoutInfo: {
+-        sidebar: SIDEBAR_DEFAULT,
++        sidebar: process.env.DSH_CLIENT_BLOOP === '1' ? 0 : SIDEBAR_DEFAULT,
+         viewportWidth: window.innerWidth,
+         narrowExpanded: false,
+         rightbar: null,
+diff --git a/packages/client/ui-layout/tests/app-frame.client.spec.tsx b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
+index 1dc7cc85..7065bbd1 100644
+--- a/packages/client/ui-layout/tests/app-frame.client.spec.tsx
++++ b/packages/client/ui-layout/tests/app-frame.client.spec.tsx
+@@ -3,7 +3,7 @@
+ import type { GlobalStandardProps, RenderOpts } from '@deepseek-ai/dsh-client-ui-slots'
+ import { allowAllAccess, bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+-import { act, cleanup, render } from '@testing-library/react'
++import { act, cleanup, fireEvent, render } from '@testing-library/react'
+ import { AppFrame } from '../src/client/AppFrame.tsx'
+ import type { AppFrameProps } from '../src/client/AppFrame.tsx'
+ import type { MainPanelId, RightbarOwnerProps, SidebarOwnerProps } from '../src/client/index.ts'
+@@ -184,6 +184,23 @@ afterEach(() => {
+ })
+ 
+ describe('AppFrame', () => {
++  it('reveals Bloop history at the left edge without moving the conversation grid', () => {
++    vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++    const b = mountFrame()
++    const edge = b.getByRole('button', { name: 'sidebar.reveal' })
++    const grid = b.frame.style.gridTemplateColumns
++    expect(b.frame.dataset.sidebarCollapsed).toBe('true')
++    fireEvent.pointerEnter(edge)
++    expect(b.frame.dataset.sidebarCollapsed).toBeUndefined()
++    expect(b.frame.style.gridTemplateColumns).toBe(grid)
++    const sidebar = b.getByTestId('sidebar-content').parentElement!
++    fireEvent.pointerLeave(sidebar)
++    expect(b.frame.dataset.sidebarCollapsed).toBe('true')
++    fireEvent.focus(edge)
++    expect(b.frame.dataset.sidebarCollapsed).toBeUndefined()
++    fireEvent.keyDown(sidebar, { key: 'Escape' })
++    expect(b.frame.dataset.sidebarCollapsed).toBe('true')
++  })
+   it('localizes the product title without a configured build title', () => {
+     mountFrame()
+     expect(document.title).toBe('DSH Local Build')
+diff --git a/packages/client/ui-settings-account/README.i18n.yaml b/packages/client/ui-settings-account/README.i18n.yaml
+index e62a1284..a2fa93da 100644
+--- a/packages/client/ui-settings-account/README.i18n.yaml
++++ b/packages/client/ui-settings-account/README.i18n.yaml
+@@ -24,8 +24,8 @@
+   en: 149d25b949a24036
+   zh: a432400e245bf48b
+ /deepseek-ai-dsh-client-ui-settings-account/further-exploration:
+-  en: f5ca95916ef486dc
+-  zh: 1e238d8299e0d838
++  en: 34cef219c7ded29b
++  zh: 3766568887ea8c84
+ /deepseek-ai-dsh-client-ui-settings-account/model-experience:
+   en: ee1df7ca3467ee3f
+   zh: 84904a5148da3862
+diff --git a/packages/client/ui-settings-account/README.md b/packages/client/ui-settings-account/README.md
+index d79f8ac0..ef02fd28 100644
+--- a/packages/client/ui-settings-account/README.md
++++ b/packages/client/ui-settings-account/README.md
+@@ -84,6 +84,8 @@ The balance card shows recharge funds and bonus credit in separate rows. While s
+ 
+ A successful login selects the first available `deepseek-account` model as the default when no other provider has a configured API key, even if a previous default was saved. Configured keys preserve the existing default even when their provider has no available models. Session-specific selections remain unchanged.
+ 
++Bloop builds show a Settings button in the sidebar that opens settings directly, without the account launcher menu.
++
+ <a id="model-experience"></a>
+ ## Model Experience
+ 
+diff --git a/packages/client/ui-settings-account/README.zh.md b/packages/client/ui-settings-account/README.zh.md
+index 8a02f26e..9c771a20 100644
+--- a/packages/client/ui-settings-account/README.zh.md
++++ b/packages/client/ui-settings-account/README.zh.md
+@@ -84,6 +84,8 @@ Desktop preload 标记在账号凭证已存储后启用引导。进度属于本
+ 
+ 登录成功时，若其他提供方均未配置 API key，则将 `deepseek-account` 的第一个可用模型设为默认值，即使此前保存过默认选择。其他提供方只要配置了 key，就保留原默认值，即使其没有可用模型。会话内的显式选择保持不变。
+ 
++Bloop 构建在侧栏显示设置按钮，点击直接打开设置，不显示账号启动菜单。
++
+ <a id="model-experience"></a>
+ ## 模型体验
+ 
+diff --git a/packages/client/ui-settings-account/src/client/AccountMenu.tsx b/packages/client/ui-settings-account/src/client/AccountMenu.tsx
+index f2274e30..236392c3 100644
+--- a/packages/client/ui-settings-account/src/client/AccountMenu.tsx
++++ b/packages/client/ui-settings-account/src/client/AccountMenu.tsx
+@@ -61,7 +61,13 @@ export function AccountMenu({
+       notices={account.notices}
+       anchor={anchor} title={t('bonusNoticeTitle')} closeLabel={t('close')}
+       onShown={bonusNoticeShown} onDismiss={bonusNoticeDismissed} />}
+-    <Menu open={open} side="top" portal autoFocus className={css.anchor} listClassName={signedIn ? undefined : css.signedOutMenu}
++    {process.env.DSH_CLIENT_BLOOP === '1' ? <button
++      type="button" className={css.trigger} data-collapsed={!wide} data-signed-out
++      aria-label={t('settings')} aria-haspopup="dialog" aria-expanded={settingsOpen}
++      aria-keyshortcuts={settingsShortcut?.aria} onClick={openSettings}>
++      <IconSettingsOutlineMedium size={16} />
++      {wide && <span className={css.label}>{t('settings')}</span>}
++    </button> : <Menu open={open} side="top" portal autoFocus className={css.anchor} listClassName={signedIn ? undefined : css.signedOutMenu}
+       anchor={<button ref={trigger} type="button" className={css.trigger} data-collapsed={!wide} data-signed-out={!signedIn} aria-label={t('menu')}
+         aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen(value => !value) }}>
+         {signedIn
+@@ -84,7 +90,7 @@ export function AccountMenu({
+         else if (id === 'contact') { setOpen(false); contactUs() }
+         else if (id === 'signin') beginSignIn()
+         else void requestSignOut()
+-      }} />
++      }} />}
+     {account.loginVisible && !account.onboarding && <SignInDialog account={account} colorScheme={colorScheme}
+       start={start} cancel={cancel} t={t}
+       close={() => { showLogin(false) }} useApiKey={() => { showLogin(false); openOnboarding('deepseek-official') }} />}
+diff --git a/packages/client/ui-settings-account/tests/account.client.spec.tsx b/packages/client/ui-settings-account/tests/account.client.spec.tsx
+index e6c72c09..5dfaf6f9 100644
+--- a/packages/client/ui-settings-account/tests/account.client.spec.tsx
++++ b/packages/client/ui-settings-account/tests/account.client.spec.tsx
+@@ -91,14 +91,15 @@ function SharedPlatformHost({ Globals, pages, platform, copy, refreshAccount }:
+  * @param operations - account face the launcher injects.
+  * @param snapshot - reads the account state the launcher renders, so a rerender observes the latest value.
+  * @param settingsOpen - whether the settings panel covers the sidebar.
++ * @param openSettings - opens the settings panel.
+  * @returns the sidebar launcher with its framework hooks wired to the test face.
+  */
+-async function accountMenu(operations: AccountSectionInjected, snapshot: () => AccountSnapshot, settingsOpen: boolean) {
++async function accountMenu(operations: AccountSectionInjected, snapshot: () => AccountSnapshot, settingsOpen: boolean, openSettings = () => {}) {
+   const { AccountMenu } = await import('../src/client/AccountMenu.tsx')
+   return <AccountMenu {...({} as GlobalStandardProps)} {...operations}
+     settingsOpen={settingsOpen} useAccount={selector => selector(snapshot())} wide
+     useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
+-    openOnboarding={() => {}} openSettings={() => {}} t={key => en[key as AccountKey]} />
++    openOnboarding={() => {}} openSettings={openSettings} t={key => en[key as AccountKey]} />
+ }
+ 
+ it.each([en, zh])('renders account cards without inventing profile or balance data', async (copy) => {
+@@ -730,3 +731,17 @@ it.each(['desktopOnboardingVisible', 'onboarding'] as const)('defers bonus displ
+   await vi.waitFor(() => { expect(operations.bonusNoticeShown).toHaveBeenCalledExactlyOnceWith(notice.orderId) })
+   expect(screen.getByText(notice.message)).toBeTruthy()
+ })
++
++
++it('Bloop shows only a direct Settings launcher', async () => {
++  vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++  onTestFinished(() => { vi.unstubAllEnvs() })
++  const operations = operationsOf({ status: 'signed-out', attempt: null })
++  const openSettings = vi.fn()
++  render(await accountMenu(operations, operations.hooks.account.getSnapshot, false, openSettings))
++  fireEvent.click(screen.getByRole('button', { name: en.settings }))
++  expect(openSettings).toHaveBeenCalledOnce()
++  expect(screen.queryByRole('menu')).toBeNull()
++  expect(screen.queryByText(en.more)).toBeNull()
++  expect(screen.queryByText(en.contactUs)).toBeNull()
++})
+diff --git a/packages/client/ui-settings-general/README.i18n.yaml b/packages/client/ui-settings-general/README.i18n.yaml
+index a458bb8c..e261f5c5 100644
+--- a/packages/client/ui-settings-general/README.i18n.yaml
++++ b/packages/client/ui-settings-general/README.i18n.yaml
+@@ -45,8 +45,8 @@
+   en: 5d722d055516f905
+   zh: e7a236f0ff84f7ff
+ /deepseek-ai-dsh-client-ui-settings-general/further-exploration:
+-  en: 21348b768f60f587
+-  zh: 0c3c5b6a682ae267
++  en: ddb49d17d203eed5
++  zh: ec1f5923e21a397b
+ /deepseek-ai-dsh-client-ui-settings-general/model-experience:
+   en: 3120df665299c634
+   zh: 1d9f365d091d0d2a
+diff --git a/packages/client/ui-settings-general/README.md b/packages/client/ui-settings-general/README.md
+index b005515e..20e1e508 100644
+--- a/packages/client/ui-settings-general/README.md
++++ b/packages/client/ui-settings-general/README.md
+@@ -104,6 +104,8 @@ These pages cover the settings surface family and the composition model.
+ 
+ -----
+ 
++Bloop builds list only General and Models in settings navigation; the General permission controls remain available.
++
+ <a id="model-experience"></a>
+ ## Model Experience
+ 
+diff --git a/packages/client/ui-settings-general/README.zh.md b/packages/client/ui-settings-general/README.zh.md
+index 8628916c..396363ba 100644
+--- a/packages/client/ui-settings-general/README.zh.md
++++ b/packages/client/ui-settings-general/README.zh.md
+@@ -104,6 +104,8 @@ Web 与桌面端的通用设置底部显示当前发布版本，使用构建注
+ 
+ -----
+ 
++Bloop 构建的设置导航只显示通用和模型；通用中的权限控件保持可用。
++
+ <a id="model-experience"></a>
+ ## 模型体验
+ 
+diff --git a/packages/client/ui-settings-general/src/client/SettingsRoot.tsx b/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
+index 761ae2dc..5c6003e3 100644
+--- a/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
++++ b/packages/client/ui-settings-general/src/client/SettingsRoot.tsx
+@@ -126,7 +126,8 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
+   // The ledger tick keeps the nav rows fresh: registrants re-register with
+   // freshly localized text on locale change, and the trigger/header/close
+   // seats re-render through their own outlets' subscriptions.
+-  const rows = useSections(s => s)
++  const rows = useSections(s => process.env.DSH_CLIENT_BLOOP === '1'
++    ? s.filter(row => row.id === 'general' || row.id === 'models') : s)
+   const desktopUpdate = useDesktopUpdate(state => state)
+   const connectionState = useConnectionState(state => state)
+   const previousConnectionState = useRef(connectionState)
+diff --git a/packages/client/ui-settings-general/tests/settings-root.client.spec.tsx b/packages/client/ui-settings-general/tests/settings-root.client.spec.tsx
+index 2f46ad20..fda51fdc 100644
+--- a/packages/client/ui-settings-general/tests/settings-root.client.spec.tsx
++++ b/packages/client/ui-settings-general/tests/settings-root.client.spec.tsx
+@@ -529,3 +529,21 @@ it('passes current Settings key labels to the launcher and removes them when unb
+   setShortcuts([{ ...row, keys: [], aria: undefined, binding: null, modified: true }])
+   expect(launcher()).not.toHaveProperty('settingsShortcut')
+ })
++
++
++it('Bloop settings keeps only General and Models even when another section was selected', () => {
++  vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++  try {
++    mount({ rows: [
++      { id: 'general', order: 0, label: 'General' },
++      { id: 'models', order: 10, label: 'Models' },
++      { id: 'plugins', order: 20, label: 'Built-in plugins' },
++      { id: 'agent-presets', order: 30, label: 'Agent presets' },
++    ] })
++    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
++    expect(screen.getByRole('button', { name: 'General' })).toBeTruthy()
++    expect(screen.getByRole('button', { name: 'Models' })).toBeTruthy()
++    expect(screen.queryByRole('button', { name: 'Built-in plugins' })).toBeNull()
++    expect(screen.queryByRole('button', { name: 'Agent presets' })).toBeNull()
++  } finally { vi.unstubAllEnvs() }
++})
+diff --git a/packages/client/ui-sidebar/README.i18n.yaml b/packages/client/ui-sidebar/README.i18n.yaml
+index da1a7525..ab058ed8 100644
+--- a/packages/client/ui-sidebar/README.i18n.yaml
++++ b/packages/client/ui-sidebar/README.i18n.yaml
+@@ -41,6 +41,12 @@
+ /deepseek-ai-dsh-client-ui-sidebar/further-exploration:
+   en: 5083bbf74e47bb67
+   zh: 0236e569178756a2
++/deepseek-ai-dsh-client-ui-sidebar/single-directory-desktop-builds:
++  en: 140e07233ac4fb5b
++  zh: 35836f29e201ecdf
++/deepseek-ai-dsh-client-ui-sidebar/bloop-controls:
++  en: e91ca81f79e917c3
++  zh: 40e861e7531e682f
+ /deepseek-ai-dsh-client-ui-sidebar/model-experience:
+   en: 3120df665299c634
+   zh: 1d9f365d091d0d2a
+diff --git a/packages/client/ui-sidebar/README.md b/packages/client/ui-sidebar/README.md
+index 927ee4de..4a971f58 100644
+--- a/packages/client/ui-sidebar/README.md
++++ b/packages/client/ui-sidebar/README.md
+@@ -87,6 +87,14 @@ These pages cover the surfaces that fill the shell's seats and the composition m
+ -----
+ 
+ <a id="model-experience"></a>
++## Single-directory desktop builds
++
++In [single-directory desktop builds](../ui-workspace/README.md), global panels move to the footer Tools menu; panel registrations and plugin activation remain unchanged.
++
++## Bloop controls
++
++Bloop builds omit the build badge, brand row, and Tools shortcut. The creation button reads New Task in English and 新对话 in Chinese. Existing settings and plugin capabilities remain registered. Hover-history geometry belongs to [ui-layout](../ui-layout/README.md).
++
+ ## Model Experience
+ 
+ None, as the package is a browser-side UI plugin layer that registers nothing model-facing.
+diff --git a/packages/client/ui-sidebar/README.zh.md b/packages/client/ui-sidebar/README.zh.md
+index 95f7c5ea..d9e82679 100644
+--- a/packages/client/ui-sidebar/README.zh.md
++++ b/packages/client/ui-sidebar/README.zh.md
+@@ -87,6 +87,14 @@ dsh Web 客户端的侧边栏让用户识别当前构建、启动新会话、将
+ -----
+ 
+ <a id="model-experience"></a>
++## 固定目录桌面构建
++
++在[固定目录桌面构建](../ui-workspace/README.zh.md)中，全局面板移至底部“工具”菜单，面板注册和插件加载保持不变。
++
++## Bloop 控件
++
++Bloop 构建隐藏构建标识、品牌行和工具快捷按钮，创建按钮英文显示 New Task，中文显示新对话。原有设置和插件能力仍保持注册。悬浮历史的布局由 [ui-layout](../ui-layout/README.zh.md) 管理。
++
+ ## 模型体验
+ 
+ 无。该包是浏览器端 UI 插件层，不注册任何面向模型的内容。
+diff --git a/packages/client/ui-sidebar/src/client/SidebarRoot.tsx b/packages/client/ui-sidebar/src/client/SidebarRoot.tsx
+index 46c01930..a83875c7 100644
+--- a/packages/client/ui-sidebar/src/client/SidebarRoot.tsx
++++ b/packages/client/ui-sidebar/src/client/SidebarRoot.tsx
+@@ -19,7 +19,7 @@
+ import { useEffect, useRef, useState } from 'react'
+ import clsx from 'clsx'
+ import {
+-  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, isDarwinDesktop, ShortcutKeys, Tooltip,
++  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, IconSlidersTwoOutlineRegular, isDarwinDesktop, Menu, ShortcutKeys, Tooltip,
+ } from '@deepseek-ai/dsh-client-ui-primitives'
+ import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+ import type {
+@@ -98,6 +98,9 @@ export function SidebarRoot({
+   renderSlot,
+ }: SidebarRootComponentProps) {
+   const panels = usePanels(snapshot => snapshot)
++  const bloop = process.env.DSH_CLIENT_BLOOP === '1'
++  const singleWorkspace = process.env.DSH_CLIENT_WORKSPACE_PATH !== undefined
++  const [toolsOpen, setToolsOpen] = useState(false)
+   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
+   const newShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.new'))
+   const toggleLabel = collapsed ? t('toggle.open') : t('toggle.collapse')
+@@ -212,8 +215,8 @@ export function SidebarRoot({
+     >
+       {/* macOS hiddenInset titlebar: the strip shares the row with the
+           traffic lights and keeps the toggle at the sidebar's top-right. */}
+-      {darwinDesktop && <div className={css.topStrip} data-window-drag>{toggle}</div>}
+-      <div className={css.logoRow} data-window-drag>
++      {darwinDesktop && <div className={css.topStrip} data-window-drag>{!bloop && toggle}</div>}
++      {!bloop && <div className={css.logoRow} data-window-drag>
+         {/* Expanded, the brand doubles as a New Session shortcut — except on
+             macOS, where it stays part of the logo row's window-drag surface
+             (a button would subtract itself through the global no-drag rule);
+@@ -253,14 +256,14 @@ export function SidebarRoot({
+             )
+         })()}
+         {!darwinDesktop && toggle}
+-      </div>
++      </div>}
+ 
+       {/* The label fades before the hover/focus shortcut, including on translucent backgrounds. */}
+-      <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500} side={captionTooltipSide} disabled={wide}>
++      <Tooltip label={t(bloop ? 'task.new' : 'session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500} side={captionTooltipSide} disabled={wide}>
+         <button
+           type="button"
+           className={css.newSession}
+-          aria-label={t('session.new.label')}
++          aria-label={t(bloop ? 'task.new' : 'session.new.label')}
+           aria-keyshortcuts={newShortcut?.aria}
+           onClick={() => { startSession() }}
+         >
+@@ -268,7 +271,7 @@ export function SidebarRoot({
+             {wide
+               ? <IconNewChatOutlineMedium size={14} />
+               : <IconNewChatOutlineRegular size={windowsTitlebar ? 16 : 18} />}
+-            {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
++            {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t(bloop ? 'task.new' : 'session.new')}</span>}
+           </span></span>
+           {wide && newShortcut !== undefined && newShortcut.keys.length > 0 && <span className={css.newSessionShortcut} aria-hidden="true">
+             <ShortcutKeys keys={newShortcut.keys} />
+@@ -276,7 +279,7 @@ export function SidebarRoot({
+         </button>
+       </Tooltip>
+ 
+-      {panels.length > 0 && (
++      {!singleWorkspace && panels.length > 0 && (
+         <nav className={css.panelList} aria-label={t('panels.label')}>
+           {panels.map(({ id, label }) => (
+             <PanelRow
+@@ -303,6 +306,18 @@ export function SidebarRoot({
+ 
+       {/* Footer actions stack above Settings in both sidebar widths. */}
+       <div className={css.footArea}>
++        {singleWorkspace && !bloop && panels.length > 0 && <Menu
++          open={toolsOpen}
++          onClose={() => { setToolsOpen(false) }}
++          items={panels.map(panel => ({ id: panel.id, label: panel.label }))}
++          onSelect={id => { selectPanel(id as SidebarPanelMetadata['id']); setToolsOpen(false) }}
++          side="top"
++          portal
++          anchor={<button type="button" className={css.panelRow} aria-label={t('tools.label')} onClick={() => { setToolsOpen(value => !value) }}>
++            <span className={css.panelGlyph}><IconSlidersTwoOutlineRegular /></span>
++            {wide && <span className={css.panelTitle}>{t('tools.label')}</span>}
++          </button>}
++        />}
+         <div className={css.footerActions}>
+           {renderSlot('sidebar.footer.action', { wide })}
+         </div>
+diff --git a/packages/client/ui-sidebar/src/client/locales.ts b/packages/client/ui-sidebar/src/client/locales.ts
+index bdd14863..eb57909f 100644
+--- a/packages/client/ui-sidebar/src/client/locales.ts
++++ b/packages/client/ui-sidebar/src/client/locales.ts
+@@ -2,11 +2,13 @@
+ 
+ /** Simplified Chinese dictionary (the key-set source of truth). */
+ export const zh = {
++  'task.new': '新对话',
+   'session.new': '新会话',
+   'session.new.label': '新建会话',
+   'toggle.open': '打开侧边栏',
+   'toggle.collapse': '收起侧边栏',
+   'panels.label': '全局面板',
++  'tools.label': '工具',
+ } satisfies Record<string, string>
+ 
+ /** The sidebar namespace key union. */
+@@ -14,9 +16,11 @@ export type SidebarKey = keyof typeof zh
+ 
+ /** English dictionary, checked complete against the zh key set. */
+ export const en = {
++  'task.new': 'New Task',
+   'session.new': 'New Session',
+   'session.new.label': 'New session',
+   'toggle.open': 'Open sidebar',
+   'toggle.collapse': 'Collapse sidebar',
+   'panels.label': 'Global panels',
++  'tools.label': 'Tools',
+ } satisfies Record<SidebarKey, string>
+diff --git a/packages/client/ui-sidebar/tests/sidebar-root.client.spec.tsx b/packages/client/ui-sidebar/tests/sidebar-root.client.spec.tsx
+index c0aee40a..4721f0d0 100644
+--- a/packages/client/ui-sidebar/tests/sidebar-root.client.spec.tsx
++++ b/packages/client/ui-sidebar/tests/sidebar-root.client.spec.tsx
+@@ -8,7 +8,7 @@ import { allowAllAccess, makeTranslate } from '@deepseek-ai/dsh-client-test-runt
+ import type { ReactNode } from 'react'
+ import type {
+   SidebarFooterActionOwnerProps, SidebarRootComponentProps, SidebarSectionOwnerProps,
+-  SidebarSettingsOwnerProps,
++  SidebarSettingsOwnerProps, SidebarPanelMetadata,
+ } from '../src/client/contract/slots.ts'
+ import { HeaderLeadingControls, type HeaderLeadingControlsProps } from '../src/client/HeaderLeadingControls.tsx'
+ import { SidebarRoot } from '../src/client/SidebarRoot.tsx'
+@@ -28,6 +28,16 @@ afterEach(() => {
+   vi.useRealTimers()
+ })
+ 
++it('shows New Task without build branding or the tools shortcut in Bloop', () => {
++  vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++  vi.stubEnv('DSH_CLIENT_WORKSPACE_PATH', '/w/one')
++  const b = mountShell()
++  expect(screen.queryByTestId('custom-brand-mark')).toBeNull()
++  expect(screen.queryByRole('button', { name: 'Tools' })).toBeNull()
++  fireEvent.click(screen.getByRole('button', { name: 'New Task' }))
++  expect(b.startSession).toHaveBeenCalledOnce()
++})
++
+ // The shell never reads the global hooks itself, but they ride the standard
+ // props share; stub them as never-called functions.
+ const neverHook = (() => { throw new Error('shell must not read global hooks') }) as never
+@@ -35,13 +45,15 @@ type AttentionSnapshot = Parameters<Parameters<SidebarRootComponentProps['useSes
+ const noAttention: AttentionSnapshot = new Map()
+ const useSessionStatus: SidebarRootComponentProps['useSessionStatus'] = selector => selector(noAttention)
+ 
+-function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
++function mountShell({ collapsed = false, width = 300, shortcuts = [], panels = [] }: {
+   collapsed?: boolean
+   width?: number
+   shortcuts?: readonly ShortcutCatalogEntry[]
++  panels?: readonly SidebarPanelMetadata[]
+ } = {}) {
+   const startSession = vi.fn()
+   const toggleSidebar = vi.fn()
++  const selectPanel = vi.fn()
+   let regionOwner: SidebarSectionOwnerProps | undefined
+   let settingsOwner: SidebarSettingsOwnerProps | undefined
+   let footerActionOwner: SidebarFooterActionOwnerProps | undefined
+@@ -52,7 +64,7 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
+     <SidebarRoot
+       collapsed={current.collapsed} width={current.width}
+       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
+-      usePanelInfo={usePanelInfo} selectPanel={() => {}} usePanels={selector => selector([])} useShortcuts={selector => selector(shortcuts)}
++      usePanelInfo={usePanelInfo} selectPanel={selectPanel} usePanels={selector => selector(panels)} useShortcuts={selector => selector(shortcuts)}
+       useResource={useResource} useWorkspaces={neverHook}
+       {...allowAllAccess}
+       startSession={startSession} toggleSidebar={toggleSidebar} t={t}
+@@ -80,6 +92,7 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
+   return {
+     startSession,
+     toggleSidebar,
++    selectPanel,
+     regionOwner: () => {
+       if (regionOwner === undefined) throw new Error('region owner not rendered')
+       return regionOwner
+@@ -100,6 +113,18 @@ function mountShell({ collapsed = false, width = 300, shortcuts = [] }: {
+ }
+ 
+ describe('SidebarRoot shell', () => {
++  it('keeps plugin panels available in Tools without showing panel rows above history', () => {
++    vi.stubEnv('DSH_CLIENT_WORKSPACE_PATH', '/projects/fixed')
++    try {
++      const b = mountShell({ panels: [{ id: 'plugins' as SidebarPanelMetadata['id'], label: 'Plugins', order: 1 }] })
++      expect(screen.queryByRole('navigation', { name: 'Global panels' })).toBeNull()
++      expect(screen.queryByRole('button', { name: 'Plugins' })).toBeNull()
++      fireEvent.click(screen.getByRole('button', { name: 'Tools' }))
++      fireEvent.click(screen.getByRole('menuitem', { name: 'Plugins' }))
++      expect(b.selectPanel).toHaveBeenCalledExactlyOnceWith('plugins')
++    } finally { vi.unstubAllEnvs() }
++  })
++
+   it('advertises the effective new-session binding', () => {
+     const shortcut: ShortcutCatalogEntry = { id: 'session.new' as ShortcutCommandId, label: 'New', aliases: [],
+       binding: null, modified: true, conflicts: [], issue: null, keys: ['Ctrl', 'N'], aria: 'Control+N' }
+diff --git a/packages/client/ui-workspace/README.i18n.yaml b/packages/client/ui-workspace/README.i18n.yaml
+index 60a03011..b9afa524 100644
+--- a/packages/client/ui-workspace/README.i18n.yaml
++++ b/packages/client/ui-workspace/README.i18n.yaml
+@@ -59,6 +59,9 @@
+ /deepseek-ai-dsh-client-ui-workspace/further-exploration:
+   en: 2abbf27abbd71ba4
+   zh: ace33fa2ea042357
++/deepseek-ai-dsh-client-ui-workspace/single-directory-desktop-builds:
++  en: 478487db182396fc
++  zh: 11921a2123ddaef1
+ /deepseek-ai-dsh-client-ui-workspace/model-experience:
+   en: 3120df665299c634
+   zh: 1d9f365d091d0d2a
+diff --git a/packages/client/ui-workspace/README.md b/packages/client/ui-workspace/README.md
+index 2654447b..b7261832 100644
+--- a/packages/client/ui-workspace/README.md
++++ b/packages/client/ui-workspace/README.md
+@@ -203,6 +203,10 @@ These pages cover the sidebar host, the hero surface, and the picking backends.
+ -----
+ 
+ <a id="model-experience"></a>
++## Single-directory desktop builds
++
++A build with `DSH_CLIENT_WORKSPACE_PATH` set to an absolute directory starts a blank conversation in that directory and keeps New Session in the same directory. The sidebar presents flat conversation history without workspace creation, selection, or grouping controls; global plugin panels remain available through Tools. Existing workspace records and conversation logs are retained. This is a public build-time value, not a model instruction or a filesystem permission setting. Builds without the value retain the standard workspace interface.
++
+ ## Model Experience
+ 
+ None, as the package is a browser-side UI plugin layer that registers nothing model-facing.
+diff --git a/packages/client/ui-workspace/README.zh.md b/packages/client/ui-workspace/README.zh.md
+index c6559954..775d413a 100644
+--- a/packages/client/ui-workspace/README.zh.md
++++ b/packages/client/ui-workspace/README.zh.md
+@@ -203,6 +203,10 @@ Workspace 与 Session 悬浮卡片会复制对应行被截断的值：激活 Wor
+ -----
+ 
+ <a id="model-experience"></a>
++## 固定目录桌面构建
++
++构建时将 `DSH_CLIENT_WORKSPACE_PATH` 设置为绝对目录后，应用在该目录中打开空白对话，新建会话也沿用此目录。侧栏平铺显示历史对话，隐藏工作区创建、选择和分组控件；全局插件面板从“工具”入口访问。已有工作区记录和对话日志保留。此项是公开的构建期配置，不是模型指令，也不改变文件系统权限。未设置此值的构建继续使用标准工作区界面。
++
+ ## 模型体验
+ 
+ 无。该包是浏览器端 UI 插件层，不注册任何面向模型的内容。
+diff --git a/packages/client/ui-workspace/src/client/locales.ts b/packages/client/ui-workspace/src/client/locales.ts
+index 0214ab99..cdc99add 100644
+--- a/packages/client/ui-workspace/src/client/locales.ts
++++ b/packages/client/ui-workspace/src/client/locales.ts
+@@ -6,6 +6,7 @@
+ 
+ /** Simplified Chinese dictionary (the key-set source of truth). */
+ export const zh = {
++  'task.new': '新对话',
+   'defaultWorkspace.failed': '无法创建默认工作区，请通过“选择工作区”选择文件夹',
+   'draft.workspaceRequired': '请先选择工作区',
+   'draft.initializationFailed': '暂时无法填入草稿，请稍后重试',
+@@ -19,6 +20,7 @@ export const zh = {
+   'shortcut.forkFailed': '无法分叉会话，请重试',
+   'section.workspaces': '工作区',
+   'section.sessions': '会话',
++  'section.history': '历史对话',
+   'viewOptions.label': '视图选项',
+   'groupBy.label': '分组方式',
+   'groupBy.workspace': '按工作区',
+@@ -132,6 +134,7 @@ export type WorkspaceKey = keyof typeof zh
+ 
+ /** English dictionary, checked complete against the zh key set. */
+ export const en = {
++  'task.new': 'New Task',
+   'defaultWorkspace.failed': 'Unable to create default workspace. Use Choose workspace to select a folder.',
+   'draft.workspaceRequired': 'Choose a workspace first.',
+   'draft.initializationFailed': 'Could not fill the draft. Please try again shortly.',
+@@ -145,6 +148,7 @@ export const en = {
+   'shortcut.forkFailed': 'Could not fork the session. Try again.',
+   'section.workspaces': 'Workspaces',
+   'section.sessions': 'Sessions',
++  'section.history': 'History',
+   'viewOptions.label': 'View options',
+   'groupBy.label': 'Group by',
+   'groupBy.workspace': 'WorkSpace',
+diff --git a/packages/client/ui-workspace/src/client/navigation.ts b/packages/client/ui-workspace/src/client/navigation.ts
+index 9c8fa977..7f43dbe9 100644
+--- a/packages/client/ui-workspace/src/client/navigation.ts
++++ b/packages/client/ui-workspace/src/client/navigation.ts
+@@ -331,7 +331,10 @@ class UiWorkspaceService extends Service implements UiWorkspace {
+     const recent = workspace.phase === 'ready' && sessions.phase === 'ready'
+       ? recentWorkspace(workspace.items, sessions.byId)
+       : undefined
+-    const target = workspaceId ?? currentWorkspaceId ?? recent
++    const fixedPath = process.env.DSH_CLIENT_WORKSPACE_PATH
++    const target = fixedPath === undefined
++      ? workspaceId ?? currentWorkspaceId ?? recent
++      : workspace.items.find(item => item.path === fixedPath)?.workspaceId
+     if (target === undefined) {
+       if (initializeDraft) {
+         this.notify({ kind: 'createFailed', message: this.ctx.locale.bind('workspace')('draft.workspaceRequired') })
+@@ -440,6 +443,16 @@ class UiWorkspaceService extends Service implements UiWorkspace {
+   }
+ 
+   private async restoreSelection(workspaces: WorkspaceSnapshot, sessions: SessionListState): Promise<void> {
++    const fixedPath = process.env.DSH_CLIENT_WORKSPACE_PATH
++    if (fixedPath !== undefined) {
++      const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
++      const workspace = workspaces.items.find(item => item.path === fixedPath)
++        ?? await this.workspaces.create({ path: fixedPath })
++      if (navigation.aborted) return
++      const sessionId = await this.connectWorkspace(workspace.workspaceId)
++      if (!navigation.aborted) this.replaceMain(sessionId, navigation, 'reveal')
++      return
++    }
+     const saved = this.selection.getSnapshot()
+     if (saved.subagentAddress !== undefined) {
+       this.replaceMain(saved.subagentAddress, this.lifetime.signal, 'preserve')
+diff --git a/packages/client/ui-workspace/src/client/rows/Rows.tsx b/packages/client/ui-workspace/src/client/rows/Rows.tsx
+index 216a6fc0..98102777 100644
+--- a/packages/client/ui-workspace/src/client/rows/Rows.tsx
++++ b/packages/client/ui-workspace/src/client/rows/Rows.tsx
+@@ -46,7 +46,7 @@ type RowRenderSlots = PropsRenderSlots<
+ 
+ /** Row display title: blank rows show the localized New Session label. */
+ function displayTitle(node: SessionNode, t: RowTranslate): string {
+-  return node.blank ? t('session.new') : (node.title || t('session.untitled'))
++  return node.blank ? t(process.env.DSH_CLIENT_BLOOP === '1' ? 'task.new' : 'session.new') : (node.title || t('session.untitled'))
+ }
+ 
+ /* Overflow this small hides no meaningful tail; scrolling for it reads as an
+diff --git a/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx b/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx
+index df871654..983b6f4b 100644
+--- a/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx
++++ b/packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx
+@@ -948,8 +948,10 @@ export function WorkspaceBrowser({
+   const pinnedSessionIds = useWorkspaces(state => state.pinnedSessionIds)
+   // Live occupancy of this surface's directory-flow hole (the same source the
+   // flow reads): a composition without a picking affordance can add nothing.
+-  const directoryFlowAvailable = useDirectoryFlow(occupied => occupied)
+-  const groupBy = useStore(s => s.groupBy)
++  const singleWorkspace = process.env.DSH_CLIENT_WORKSPACE_PATH !== undefined
++  const directoryFlowAvailable = useDirectoryFlow(occupied => occupied) && !singleWorkspace
++  const storedGroupBy = useStore(s => s.groupBy)
++  const groupBy = singleWorkspace ? 'flat' : storedGroupBy
+   const orderBy = useStore(s => s.orderBy)
+   // Persisted view blobs written before the archived filter existed rehydrate
+   // without the field; they read as the default hide-archived view.
+@@ -1268,7 +1270,7 @@ export function WorkspaceBrowser({
+       <div className={css.sectionHeader}>
+         {wide && (
+           <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
+-            {groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
++            {singleWorkspace ? t('section.history') : groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
+           </span>
+         )}
+         {wide && (
+@@ -1329,7 +1331,7 @@ export function WorkspaceBrowser({
+           </div>
+         )}
+         <div className={clsx(css.headerActions, wide && searchExpanded && css.headerActionsHidden)}>
+-          {wide && (
++          {wide && !singleWorkspace && (
+             <ViewOptionsMenu
+               groupBy={groupBy}
+               orderBy={orderBy}
+@@ -1363,7 +1365,7 @@ export function WorkspaceBrowser({
+         {/* Add flow + its error dialog (same package — direct composition). */}
+         <WorkspacePickFlow
+           t={t}
+-          open={wsPickerOpen}
++          open={singleWorkspace ? false : wsPickerOpen}
+           anchorRef={wsPlusRef}
+           useWorkspaces={useWorkspaces}
+           createWorkspace={createWorkspace}
+diff --git a/packages/client/ui-workspace/src/client/shortcuts.ts b/packages/client/ui-workspace/src/client/shortcuts.ts
+index ed9852b8..26aaf572 100644
+--- a/packages/client/ui-workspace/src/client/shortcuts.ts
++++ b/packages/client/ui-workspace/src/client/shortcuts.ts
+@@ -82,7 +82,7 @@ export function installWorkspaceShortcuts(
+     () => ({ status: 'handled', run: () => { navigation.startSession() } }))
+   register('session.search', () => t('search.sessions.aria'), ['search sessions'], 'KeyK', ['primary'], ['primary', 'alt'],
+     () => ({ status: 'handled', run: controls.search }))
+-  register('workspace.add', () => t('workspace.add'), ['add workspace', 'open folder'], 'KeyO', ['primary'], ['primary', 'alt'],
++  if (process.env.DSH_CLIENT_WORKSPACE_PATH === undefined) register('workspace.add', () => t('workspace.add'), ['add workspace', 'open folder'], 'KeyO', ['primary'], ['primary', 'alt'],
+     () => {
+       const reason = addReason()
+       return reason === null ? { status: 'handled', run: controls.add } : { status: 'blocked', reason }
+diff --git a/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx b/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
+index 4b62826c..19911eec 100644
+--- a/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
++++ b/packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
+@@ -152,6 +152,22 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
+ }
+ 
+ describe('WorkspaceBrowser', () => {
++  it('shows flat conversation history without workspace controls in a fixed-directory build', () => {
++    vi.stubEnv('DSH_CLIENT_WORKSPACE_PATH', '/projects/fixed')
++    try {
++      mount({
++        useWorkspaces: hook(workspaceState([workspace('fixed', ['older', 'newer'])])),
++        useSessions: hook(sessionState([summary('older', 1), summary('newer', 2)])),
++      })
++      expect(screen.getByText('older')).toBeTruthy()
++      expect(screen.getByText('newer')).toBeTruthy()
++      expect(screen.queryByText('fixed')).toBeNull()
++      expect(screen.queryByRole('button', { name: t('workspace.add') })).toBeNull()
++      expect(screen.queryByRole('button', { name: t('viewOptions.label') })).toBeNull()
++      expect(screen.getByRole('button', { name: t('search.sessions.aria') })).toBeTruthy()
++    } finally { vi.unstubAllEnvs() }
++  })
++
+   it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
+     localStorage.clear()
+     const preferences = createWorkspaceViewStore().create()
+diff --git a/packages/client/ui-workspace/tests/workspaces-service.client.spec.ts b/packages/client/ui-workspace/tests/workspaces-service.client.spec.ts
+index 1662c1cd..15b55be3 100644
+--- a/packages/client/ui-workspace/tests/workspaces-service.client.spec.ts
++++ b/packages/client/ui-workspace/tests/workspaces-service.client.spec.ts
+@@ -320,6 +320,38 @@ function lastOpening(open: MockInstance<UiWorkspaceService['openWorkspace']>): P
+ }
+ 
+ describe('UiWorkspaceService', () => {
++  it('starts a blank conversation in the fixed directory instead of restoring another workspace', async () => {
++    vi.stubEnv('DSH_CLIENT_WORKSPACE_PATH', '/w/fixed')
++    try {
++      persistSelection({ sessionId: sid('old') })
++      const items = [workspace('other', [sid('old')]), workspace('fixed')]
++      const b = bench({ workspaces: workspaceState(items), sessions: sessionState([summary('old')]) })
++      await vi.waitFor(() => { expect(b.sessions.retain).toHaveBeenCalledWith(sid('created-fixed'), { source: 'mainView' }) })
++      b.uiWorkspace.startSession(wid('other'))
++      await vi.waitFor(() => { expect(b.sessions.create).toHaveBeenCalledTimes(2) })
++      expect(b.sessions.create.mock.calls.every(([input]) => input?.workspaceId === wid('fixed'))).toBe(true)
++      expect(b.workspaces.list.getSnapshot().items).toEqual(items)
++    } finally { vi.unstubAllEnvs() }
++  })
++
++  it('registers the fixed directory on first launch without opening a directory picker', async () => {
++    vi.stubEnv('DSH_CLIENT_WORKSPACE_PATH', '/w/fixed')
++    const create = vi.fn<IWorkspaces['create']>()
++    try {
++      const b = bench({ workspaces: workspaceState(), sessions: sessionState(), configureWorkspaces: owner => {
++        create.mockImplementation(async () => {
++          const fixed = workspace('fixed')
++          owner.list.set(workspaceState([fixed]))
++          return fixed
++        })
++        Object.defineProperty(owner, 'create', { value: create })
++      } })
++      await vi.waitFor(() => { expect(b.sessions.retain).toHaveBeenCalledWith(sid('created-fixed'), { source: 'mainView' }) })
++      expect(create).toHaveBeenCalledExactlyOnceWith({ path: '/w/fixed' })
++      expect(b.workspaces.initializeDefault).not.toHaveBeenCalled()
++    } finally { vi.unstubAllEnvs() }
++  })
++
+   it('prepares and selects the default Workspace after both startup baselines', async () => {
+     const b = bench({ configureWorkspaces: (workspaces) => {
+       workspaces.initializeDefault.mockImplementation(async () => {

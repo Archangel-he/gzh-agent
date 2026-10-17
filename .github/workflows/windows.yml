@@ -1,0 +1,53 @@
+name: Bloop Windows
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - run: npm ci
+      - run: npm test
+      - name: Build native Windows runtime and Bloop frontend
+        run: node scripts/setup-windows.mjs
+      - name: Check native Electron startup
+        shell: pwsh
+        run: |
+          $launcher = Start-Process node -ArgumentList 'scripts/start-desktop.mjs' -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              Start-Sleep -Seconds 1
+              if ($launcher.HasExited) { throw 'Bloop exited before opening its window.' }
+              $window = Get-Process electron -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq 'Bloop' }
+              if ($window) { $ready = $true; break }
+            }
+            if (-not $ready) { throw 'Bloop did not open its native window within 60 seconds.' }
+          } finally { taskkill /PID $launcher.Id /T /F 2>$null }
+      - name: Archive Windows source launcher
+        shell: pwsh
+        run: git archive --format=zip --output=Bloop-Windows-x64-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bloop-Windows-x64-source
+          path: Bloop-Windows-x64-source.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Windows-diagnostics
+          path: data/harness-source/.desktop-build/packaging-runs/
+          if-no-files-found: ignore

@@ -1,0 +1,5 @@
+{
+  "main": { "baseUrl": "https://api.deepseek.com/v1", "model": "deepseek-flash", "apiKey": "" },
+  "vision": { "baseUrl": "", "model": "", "apiKey": "" },
+  "image": { "baseUrl": "", "model": "", "apiKey": "" }
+}

@@ -1,0 +1,9 @@
+node_modules/
+data/
+.env
+.DS_Store
+coverage/
+gzh-output/
+*.zip
+*.exe
+*.msi

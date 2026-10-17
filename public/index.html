@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>排版局 · GZH Agent</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="排版局首页"><span class="brand-symbol">排</span><span>排版局<small>GZH AGENT / 01</small></span></a>
+    <div class="workspace-label">你的内容工作室</div>
+    <button class="nav active" id="newProject"><span>✦</span> 新建文章</button>
+    <button class="nav" id="settingsBtn"><span>⚙</span> 模型设置 <i id="configDot"></i></button>
+    <div class="history-label">最近的作品 <span id="historyCount">0</span></div>
+    <div id="history" class="history"><p class="muted">第一篇作品，从这里开始。</p></div>
+    <div class="sidebar-bottom"><span class="tiny-dot"></span> 本地工作空间<small>素材与作品保存在这台电脑上</small></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>工作空间 <span class="slash">/</span> <strong id="projectName">新建文章</strong></span><span class="version">INITIAL RELEASE <b>v0.1</b></span></header>
+    <div class="intro"><div><span class="eyebrow">FROM IDEAS TO STORIES</span><h1>把内容，排成好文章<span>。</span></h1><p>给我文字和图片，剩下的交给设计 Agent。</p></div><button class="sample-button" id="sampleBtn">试试示例 <span>↗</span></button></div>
+    <div class="workspace">
+      <section class="editor">
+        <div class="section-heading"><h2><span>01</span> 内容与素材</h2><span class="tag">INPUT</span></div>
+        <label class="field-label" for="source">文章内容 <span id="charCount">0 / 16,000</span></label>
+        <textarea id="source" maxlength="16000" placeholder="粘贴你的文章、活动介绍或随手记下的想法……&#10;&#10;也可以只上传图片，让视觉 Agent 先理解内容。"></textarea>
+        <div class="upload-heading"><label class="field-label">图片素材</label><span>最多 6 张 · 单张 5 MB</span></div>
+        <label class="upload-box" id="dropZone"><input type="file" id="images" multiple accept="image/png,image/jpeg,image/webp"><span class="upload-icon">＋</span><strong>添加图片，或拖到这里</strong><small>配图、参考风格图、文字资料图</small></label>
+        <div id="imageList" class="image-list"></div>
+        <div class="section-heading second"><h2><span>02</span> 设计方向</h2><span class="tag">DIRECTION</span></div>
+        <div class="themes" role="group" aria-label="视觉方向"><button class="theme selected" data-theme="editorial"><i class="green"></i>墨绿刊读</button><button class="theme" data-theme="warm"><i class="orange"></i>暖纸叙事</button><button class="theme" data-theme="blue"><i class="blue"></i>蓝色简报</button></div>
+        <label class="field-label" for="instruction">告诉 Agent 你的想法</label>
+        <textarea id="instruction" maxlength="3000" placeholder="例如：像一本安静的杂志，多些留白；重点突出活动时间，保留原文。"></textarea>
+        <label class="checkbox"><input type="checkbox" id="generateImages"><span>允许 Agent 按需生成插图<small id="imageHint">需要单独配置生图服务</small></span></label>
+        <div id="revision" class="revision" hidden>正在基于已完成文章制作新版本。原版本会保留。<button id="clearRevision">取消</button></div>
+        <div class="generate-area"><select id="mode" aria-label="运行方式"><option value="live">真实 Agent</option><option value="demo">本地体验 · 非 AI</option></select><button class="primary" id="generateBtn">开始设计 <span>↗</span></button><button id="cancelBtn" class="cancel" hidden>停止任务</button></div>
+        <p class="editor-footnote">AI 会整理内容并自主设计。关键事实与发布效果，请在最终预览中确认。</p>
+      </section>
+      <section class="preview-area">
+        <div class="preview-toolbar"><div><span class="preview-dot"></span><strong>文章预览</strong><span id="stateBadge" class="state-badge">等待内容</span></div><div class="preview-actions"><button id="mobileBtn" title="手机宽度预览" aria-pressed="false">▯</button><button id="copyBtn" disabled>复制正文</button><a id="downloadBtn" class="download disabled" aria-disabled="true">下载 HTML ↓</a></div></div>
+        <div class="preview-scroll" id="previewScroll">
+          <div class="empty-preview" id="emptyPreview"><div class="paper-mark">a<span>✦</span></div><span class="eyebrow">YOUR NEXT GOOD STORY</span><h2>好内容，值得被好好看见。</h2><p>添加内容后，Agent 会理解文章，<br>安排层级、配图与阅读节奏。</p><div class="empty-lines"><i></i><i></i><i></i></div><div class="empty-steps"><span>理解素材</span><b>→</b><span>设计版式</span><b>→</b><span>交付 HTML</span></div></div>
+          <iframe id="preview" title="文章预览" sandbox="allow-same-origin" hidden></iframe>
+        </div>
+        <div class="activity-panel"><div class="activity-heading"><strong>设计进程</strong><span id="engineLabel">等待开始</span></div><ol id="activity"><li class="idle">每一步，都在这里看得见。</li></ol><div id="resultNotes" class="result-notes" hidden></div></div>
+      </section>
+    </div>
+  </main>
+  <dialog id="settingsDialog"><form id="settingsForm"><div class="dialog-header"><div><span class="eyebrow">MODEL CONNECTIONS</span><h2>连接你的模型</h2></div><button type="button" id="closeSettings" class="close" aria-label="关闭设置">×</button></div><p class="dialog-description">密钥只保存在本地服务端，保存后不回显。修改地址时请使用服务商的 API 基础地址。</p><div id="providerFields"></div><p class="settings-note">视觉模型留空时使用主模型；生图接口需支持 images/generations 并返回 b64_json 图片。</p><button class="primary save-settings" type="submit">保存模型设置</button></form></dialog>
+  <div role="status" class="toast" id="toast" hidden></div>
+</body></html>
