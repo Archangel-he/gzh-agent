@@ -27,5 +27,11 @@
   "devDependencies": {
     "pnpm": "11.28.5"
   },
-  "license": "PolyForm-Noncommercial-1.0.0"
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "allowScripts": {
+    "@deepseek-ai/dsh-subprocess-local@0.2.0-rc.2": true,
+    "node-pty@1.2.0-beta.15": true,
+    "koffi@3.1.1": true,
+    "protobufjs@7.6.6": true
+  }
 }
