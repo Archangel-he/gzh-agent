@@ -31,7 +31,10 @@ test('real Harness delegates vision and image planning, then validates an HTML d
         const results = input.messages.filter(m => m.role === 'tool');
         if (results.length === 0) { seen.push('main-vision'); call = { name: 'inspect_images', arguments: { focus: '识别画面和文字。' } }; }
         else if (results.length === 1) { seen.push('main-image'); call = { name: 'generate_image', arguments: { brief: '城市散步的绿色简洁插图', alt: '散步插图' } }; }
-        else {
+        else if (results.length === 2) {
+          seen.push('main-update');
+          call = { name: 'update_article_assets', arguments: { updates: [{ asset_id: asset.id, image_path: path.join(directory, 'assets', asset.file) }] } };
+        } else {
           seen.push('main-submit');
           const latest = await readJson(path.join(directory, 'job.json'));
           call = { name: 'submit_article', arguments: { title: '城市散步计划', html: `<section><h1>城市散步计划</h1><p>这个周末一起观察街道细节，记录生活中容易忽略的美。</p>${latest.assets.map(a => `<img src="asset://${a.id}" alt="配图">`).join('')}</section>`, notes: '由测试 API 返回，用于验证真实 Harness 的业务工具与子 Agent 连接。' } };
@@ -52,8 +55,11 @@ test('real Harness delegates vision and image planning, then validates an HTML d
   try {
     const result = await runHarness(directory, config, AbortSignal.timeout(45000));
     assert.equal(result.title, '城市散步计划');
-    assert.deepEqual(seen, ['main-vision', 'vision-child', 'main-image', 'image-child', 'image-api', 'main-submit']);
-    assert.equal((await readJson(path.join(directory, 'job.json'))).assets.length, 2);
+    assert.deepEqual(seen, ['main-vision', 'vision-child', 'main-image', 'image-child', 'image-api', 'main-update', 'main-submit']);
+    const savedAssets = (await readJson(path.join(directory, 'job.json'))).assets;
+    assert.equal(savedAssets.length, 2);
+    assert.equal(savedAssets[0].id, asset.id);
+    assert.notEqual(savedAssets[0].file, asset.file);
     assert.match(await readFile(path.join(directory, 'article.html'), 'utf8'), /记录生活中容易忽略的美/);
   } finally {
     await new Promise(resolve => fixture.close(resolve));
