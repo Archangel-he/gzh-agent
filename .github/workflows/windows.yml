@@ -26,6 +26,8 @@ jobs:
       - name: Check native Electron startup
         shell: pwsh
         run: |
+          # A nonfunctional local fixture skips first-run sign-in; this smoke sends no model requests.
+          '{"main":{"baseUrl":"https://api.deepseek.com/v1","model":"deepseek-flash","apiKey":"ci-window-smoke-placeholder"},"vision":{},"image":{}}' | Set-Content -Encoding utf8 data/settings.json
           $launcher = Start-Process node -ArgumentList 'scripts/start-desktop.mjs' -PassThru
           try {
             $ready = $false
