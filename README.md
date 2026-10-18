@@ -1,5 +1,7 @@
 # Bloop · 公众号设计桌面 Agent
 
+[许可：PolyForm Noncommercial 1.0.0](LICENSE) · 非商业用途按许可执行，商业使用须另行授权 · [许可范围与历史版本](NOTICE.md)
+
 基于 DeepSeek Harness 0.2.1-rc.2 源码构建 macOS 桌面版本，另提供 Windows x64 源码启动版。启动后直接进入可输入的新对话，固定使用本项目目录，左侧平铺历史对话；公众号插件和设计技能随会话加载。保留内置的文件、搜索、子 Agent、附件、预览和文件交付功能，默认隐藏历史侧栏，鼠标靠近左边缘时展开。左下角设置按钮直接打开设置页，导航只显示通用和模型，通用里的 Permission 保留。
 
 ## 现在怎么运行
@@ -106,7 +108,7 @@ node node_modules/pnpm/bin/pnpm.cjs run build:check
 
 ## 参考项目许可证
 
-业务插件与 Skill 为独立编写，沿用本仓库 MIT。`gzh-design-skill` 是 AGPL-3.0-or-later，本版未复制它的脚本或组件；后续直接复用前应处理相应许可要求。`html2canvas` 是 MIT，本版最终输出 HTML，暂不引入截图渲染依赖。
+Bloop 自有业务插件、Skill 与新增改动的许可范围见 [NOTICE.md](NOTICE.md)，第三方代码继续遵循各自许可证。`gzh-design-skill` 是 AGPL-3.0-or-later，本版未复制它的脚本或组件；后续直接复用前应处理相应许可要求。`html2canvas` 是 MIT，本版最终输出 HTML，暂不引入截图渲染依赖。
 
 ## Bloop 界面
 
@@ -127,3 +129,10 @@ GitHub Actions 的 `Bloop Windows` 工作流在 Windows x64 上执行业务测�
 ## 源码和许可证
 
 本仓库保存公众号业务代码、Bloop 图标、Windows 启动器，以及针对固定 Harness 提交的完整补丁，包含前端源码和宠物引擎。上游 MIT 许可和宠物许可保存在 `third-party/`；密钥、历史、输出文章和本机安装缓存不进入版本库。
+
+
+自 Bloop 项目版本 **0.1.1 的许可变更提交**起，著作权人有权授权的自有代码、文档及后续新增改动，除另有许可或既有授权外，采用 **PolyForm Noncommercial License 1.0.0**（SPDX：`PolyForm-Noncommercial-1.0.0`）。这是源码可见的非商业许可，不是 OSI 定义的开源许可。使用、修改和分发须符合 [许可证全文](LICENSE)，包括其中明确允许的个人及教育、公益等机构用途；超出许可范围的商业使用需要另行取得相关著作权人的书面授权。商业授权可通过 [GitHub Issues](https://github.com/Archangel-he/gzh-agent/issues) 联系，提交申请本身不构成授权。
+
+**历史授权保留：** `ec5610b` 及更早版本已按 MIT 发布。本次换证不追溯撤回、缩减此前已授予的 MIT 权利，也不能通过给同一份旧代码换上新许可证来取消那些授权。后续仅按新许可发布的自有新增改动需单独遵循新许可。
+
+Harness、bloub 及其他依赖仍遵循各自许可证，补丁和素材中包含的第三方部分同样如此。用户提供的文字、图片、生成的文章和第三方模型输出不因本次软件换证而自动改成该许可。完整范围和著作权声明见 [NOTICE.md](NOTICE.md) 与 [third-party/NOTICE.md](third-party/NOTICE.md)。
