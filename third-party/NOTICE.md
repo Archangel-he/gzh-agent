@@ -7,3 +7,5 @@ The animated companion uses jeremy-prt/bloub (MIT), with its license in `bloub-L
 The reference project gzh-design-skill was reviewed but its AGPL implementation was not copied into this repository.
 
 Bloop-authored code and changes have a separate licensing scope described in the repository's [LICENSE](../LICENSE) and [NOTICE.md](../NOTICE.md). That scope does not replace the MIT licenses above, revoke upstream grants, or relicense any other third-party dependencies.
+
+The desktop settings service uses js-yaml (MIT) to preserve existing model provider settings; its package retains its own license in the installed dependencies.

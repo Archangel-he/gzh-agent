@@ -55,6 +55,7 @@ await mkdir(iconset, { recursive: true });
 for (const size of [16, 32, 128, 256, 512]) {
   for (const scale of [1, 2]) await sharp(path.join(root, 'assets/bloop.svg')).resize(size * scale).png().toFile(path.join(iconset, `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`));
 }
+await sharp(path.join(root, 'assets/bloop.svg')).resize(512, 512).png().toFile(path.join(stage, 'Contents/Resources/icon.png'));
 execFileSync('/usr/bin/iconutil', ['-c', 'icns', '-o', path.join(stage, 'Contents/Resources/icon.icns'), iconset]);
 const plist = path.join(stage, 'Contents/Info.plist');
 for (const [key, value] of Object.entries({ CFBundleIdentifier: 'local.gzh.design.agent', CFBundleName: 'Bloop', CFBundleDisplayName: 'Bloop', CFBundleExecutable: 'GzhAgent' })) {

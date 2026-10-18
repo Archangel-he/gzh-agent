@@ -11,7 +11,7 @@ import { apply } from '../desktop-plugin.mjs';
 
 const bundledNode = fileURLToPath(new URL('../../DeepSeek Harness.app/Contents/Resources/runtime/primary-runtime/dependencies/node/bin/node', import.meta.url));
 test('the desktop launcher imports under the app bundled Node without native image dependencies', { skip: process.platform !== 'darwin' || !existsSync(bundledNode) }, () => {
-  const result = spawnSync(bundledNode, ['--input-type=module', '--eval', `await import(${JSON.stringify(new URL('../scripts/start-desktop.mjs', import.meta.url).href)})`], { encoding: 'utf8', timeout: 10000 });
+  const result = spawnSync(bundledNode, ['--input-type=module', '--eval', `await import(${JSON.stringify(new URL('../scripts/start-desktop.mjs', import.meta.url).href)}); await import(${JSON.stringify(new URL('../lib/desktop-ui.mjs', import.meta.url).href)})`], { encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
 
@@ -85,7 +85,7 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
       await emit('session/event', agent.session, { type: 'turn/start', data: { turn } });
       await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p><img src="asset://${asset.id}" alt="测试图"/><p>第 ${turn} 版。</p></section>`, notes: '测试交付' }, exec);
     }
-    assert.equal((await readdir(path.join(prepared.directory, 'versions'))).length, 3);
+    assert.equal((await readdir(path.join(prepared.directory, 'revisions'))).length, 4);
     assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), /第 4 版/);
     assert.match(await readFile(path.join(prepared.directory, 'preview.html'), 'utf8'), /src="data:image\/png;base64,/);
     await assert.rejects(tools.get('submit_article').execute({ title: '验证文章', html: '<section><p>被删掉的正文。</p></section>', notes: '' }, exec));
@@ -124,7 +124,7 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     assert.equal(appended.assets.length, 2);
     await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p>${appended.assets.map(a => `<img src="asset://${a.id}" alt="测试图"/>`).join('')}</section>`, notes: '素材更新' }, exec);
     assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), new RegExp(chatUpdate.assets[0].file));
-    assert.equal((await readdir(path.join(prepared.directory, 'versions'))).length, 4);
+    assert.equal((await readdir(path.join(prepared.directory, 'revisions'))).length, 5);
     const again = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: '不能覆盖', instruction: '' }, exec)).result);
     assert.equal(again.directory, prepared.directory); assert.equal(again.assets.length, 2);
     assert.equal(JSON.parse(await readFile(path.join(prepared.directory, 'job.json'))).text, source);
