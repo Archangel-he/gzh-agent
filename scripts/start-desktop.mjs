@@ -41,7 +41,7 @@ export async function startDesktop() {
   const vendorRuntime = windows ? buildPaths.runtime : path.resolve(appRoot, '..', 'DeepSeek Harness.app/Contents/Resources/runtime');
   const child = spawn(binary, [`--user-data-dir=${path.join(data, 'desktop-user-data')}`, '--force-renderer-accessibility', sourceApp], {
     cwd: appRoot, stdio: ['ignore', log.fd, log.fd],
-    env: { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', GZH_DATA_DIR: data,
+    env: { ...process.env, BLOOP_PERFORMANCE: '1', DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', GZH_DATA_DIR: data,
       DSH_DESKTOP_OPEN_DEVTOOLS: '0',
       DSH_DESKTOP_DSH_DIR: path.join(data, 'source-runtime'),
       DSH_DESKTOP_PRIMARY_RUNTIME_DIR: path.join(vendorRuntime, 'primary-runtime'),

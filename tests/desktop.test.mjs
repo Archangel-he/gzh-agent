@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -74,7 +74,7 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     const source = '这是一段需要完整保留、用于验证公众号设计交付的原始正文。';
     const prepared = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。' }, exec)).result);
     assert.equal(prepared.assets.length, 1);
-    assert.equal(tools.size, 6);
+    assert.equal(tools.size, 8);
     assert.ok(tools.has('bash') && tools.has('present'));
     await tools.get('inspect_images').execute({ focus: '识别主体' }, exec);
     assert.equal(activation.delivery, 'caller');
@@ -90,5 +90,46 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     assert.match(await readFile(path.join(prepared.directory, 'preview.html'), 'utf8'), /src="data:image\/png;base64,/);
     await assert.rejects(tools.get('submit_article').execute({ title: '验证文章', html: '<section><p>被删掉的正文。</p></section>', notes: '' }, exec));
     assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), /第 4 版/);
+    await emit('session/event', agent.session, { type: 'turn/start', data: { turn: 5 } });
+    const oldArticle = await readFile(path.join(prepared.directory, 'article.html'), 'utf8');
+    const oldPreview = await readFile(path.join(prepared.directory, 'preview.html'), 'utf8');
+    const oldJob = JSON.parse(await readFile(path.join(prepared.directory, 'job.json'), 'utf8'));
+    const replacement = path.join(directory, 'new.png');
+    await sharp({ create: { width: 60, height: 30, channels: 3, background: '#ffcc00' } }).png().toFile(replacement);
+    const update = tools.get('update_article_assets');
+    const changed = JSON.parse((await update.execute({ updates: [{ asset_id: asset.id, image_path: replacement }] }, exec)).result);
+    assert.equal(changed.assets[0].id, asset.id); assert.notEqual(changed.assets[0].file, asset.file);
+    assert.equal(changed.assets[0].width, 60);
+    assert.equal(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), oldArticle);
+    assert.equal(await readFile(path.join(prepared.directory, 'preview.html'), 'utf8'), oldPreview);
+    assert.ok((await readFile(path.join(prepared.directory, 'assets', oldJob.assets[0].file))).length);
+    const jobAfter = await readFile(path.join(prepared.directory, 'job.json'), 'utf8');
+    const filesAfter = await readdir(path.join(prepared.directory, 'assets'));
+    await assert.rejects(update.execute({ updates: [{ asset_id: asset.id, image_path: replacement }, { image_path: 'missing.png' }] }, exec));
+    assert.equal(await readFile(path.join(prepared.directory, 'job.json'), 'utf8'), jobAfter);
+    assert.deepEqual(await readdir(path.join(prepared.directory, 'assets')), filesAfter);
+    await assert.rejects(update.execute({ updates: [{ asset_id: 'unknown', image_path: replacement }] }, exec));
+    await assert.rejects(update.execute({ updates: [{ asset_id: asset.id, image_path: replacement }, { asset_id: asset.id, image_path: replacement }] }, exec));
+    await assert.rejects(update.execute({ updates: [{ image_path: replacement }] }, { ...exec, agent: { session: { id: 'child' } } }), /主 Agent/);
+    await symlink(path.resolve('assets'), path.join(directory, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+    await assert.rejects(update.execute({ updates: [{ image_path: 'escape/bloop.svg' }] }, exec), /工作区/);
+    const appended = JSON.parse((await update.execute({ updates: [{ image_path: replacement, name: '新增' }] }, exec)).result);
+    assert.equal(appended.assets.length, 2);
+    await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p>${appended.assets.map(a => `<img src="asset://${a.id}" alt="测试图"/>`).join('')}</section>`, notes: '素材更新' }, exec);
+    assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), new RegExp(changed.assets[0].file));
+    assert.equal((await readdir(path.join(prepared.directory, 'versions'))).length, 4);
+    const again = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: '不能覆盖', instruction: '' }, exec)).result);
+    assert.equal(again.directory, prepared.directory); assert.equal(again.assets.length, 2);
+    assert.equal(JSON.parse(await readFile(path.join(prepared.directory, 'job.json'))).text, source);
+    // Recreate the plugin as on app restart; durable tool results recover the task.
+    handlers.clear();
+    agent.session.snapshotEvents = () => [
+      { type: 'assistant/message', data: { message: { content: [{ type: 'tool-call', name: 'gzh_prepare_article', id: 'prepare' }] } } },
+      { type: 'tool/result', data: { message: { toolCallId: 'prepare', content: [{ type: 'text', text: JSON.stringify(prepared) }] } } },
+    ];
+    await apply(ctx); await emit('agent/created', { agent });
+    const restored = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: '不覆盖', instruction: '' }, exec)).result);
+    assert.equal(restored.directory, prepared.directory); assert.equal(restored.assets.length, 2);
+    assert.ok(tools.has('update_article_assets'));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

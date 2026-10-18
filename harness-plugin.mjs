@@ -1,9 +1,9 @@
-import { readFile, writeFile, appendFile, rename, mkdir, copyFile } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, rename, mkdir, copyFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { validateArticle, documentHtml } from './lib/article.mjs';
-import { saveImage, readJson, writeJson } from './lib/storage.mjs';
+import { saveImage, saveWorkspaceImage, readJson, writeJson } from './lib/storage.mjs';
 
 export const name = 'gzh-agent-tools';
 export const inject = ['tools', 'subagents', 'attachments'];
@@ -23,11 +23,11 @@ export async function apply(ctx, config = {}) {
     if (!exec.agent || exec.agent.session.id !== rootId) throw new Error('只有主 Agent 可以执行此操作。');
   };
 
-  // All model-side execution stays inside the three product tools; no shell or file tools.
+  // The web prototype exposes only the article tools.
   if (!config.keepBuiltins) {
     ctx.on('agent/created', ({ agent }) => {
       if (!rootId) rootId = agent.session.id;
-      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['inspect_images', 'generate_image', 'submit_article'] : [] });
+      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['inspect_images', 'generate_image', 'update_article_assets', 'submit_article'] : [] });
     });
   }
 
@@ -53,7 +53,7 @@ export async function apply(ctx, config = {}) {
   }
 
   ctx.tools.register(defineTool({
-    name: 'inspect_images', description: '委派视觉子 Agent 识别本任务上传图片的内容、文字和参考风格。包含图片时在排版前调用。',
+    name: 'inspect_images', description: '委派视觉子 Agent 识别本任务上传图片的内容、文字和参考风格。仅在尚未识别图片时调用；已查看下载联系表则不重复识别。',
     parameters: { focus: { type: 'string', required: true, description: '本次重点识别什么，例如图片文字、主体、配色或版式。' } },
     output: textOutput,
     async execute(args, exec) {
@@ -78,6 +78,7 @@ export async function apply(ctx, config = {}) {
     output: textOutput,
     async execute(args, exec) {
       rootOnly(exec);
+      if (job.assets.length >= 6) throw new Error('每篇最多六张素材，请先使用已有配图或替换素材。');
       if (!job.generateImages) throw new Error('用户本次未允许生成图片。');
       if (!imageConfig.apiKey || !imageConfig.baseUrl || !imageConfig.model) throw new Error('生图服务未配置。请保留用户原图并说明限制，不能伪造图片。');
       if (++imageCalls > 2) throw new Error('本任务生图上限为两张。');
@@ -99,6 +100,47 @@ export async function apply(ctx, config = {}) {
       await writeJson(path.join(directory, 'job.json'), job);
       await log(`图片已保存：${asset.width} × ${asset.height}`);
       return { result: JSON.stringify({ ...asset, src: `asset://${asset.id}` }) };
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: 'update_article_assets', description: '为当前文章追加或替换图片。替换保留 asset://ID，不改正文；旧图片和已提交版本保留，随后调用 submit_article 生成新版本。',
+    parameters: {
+      updates: { type: 'array', required: true, description: '最多六项。asset_id 留空追加；填写已有 ID 则替换。image_path 必须在工作区内。', items: { type: 'object', properties: {
+        asset_id: { type: 'string', description: '待替换的已有素材 ID；追加时省略。' },
+        image_path: { type: 'string', required: true, description: '工作区内的 PNG、JPG 或 WebP 路径。' },
+        name: { type: 'string' }, role: { type: 'string', enum: ['article', 'reference', 'document'] },
+      }, additionalProperties: false } },
+    }, output: textOutput,
+    async execute(args, exec) {
+      rootOnly(exec);
+      if (!Array.isArray(args.updates) || !args.updates.length || args.updates.length > 6) throw new Error('每次更新一至六张图片。');
+      const ids = new Set();
+      for (const item of args.updates) {
+        if (!item.image_path || item.asset_id && (!job.assets.some(a => a.id === item.asset_id) || ids.has(item.asset_id))) throw new Error('图片路径不能为空，替换 ID 必须存在且不能重复。');
+        if (item.asset_id) ids.add(item.asset_id);
+      }
+      if (job.assets.length + args.updates.filter(x => !x.asset_id).length > 6) throw new Error('每篇最多六张素材，请替换已有图片。');
+      const workspace = config.workspace || process.cwd();
+      const nextAssets = [...job.assets], staged = [];
+      try {
+        for (const item of args.updates) {
+          exec.signal.throwIfAborted();
+          const index = nextAssets.findIndex(a => a.id === item.asset_id);
+          const previous = nextAssets[index];
+          const asset = await saveWorkspaceImage(directory, workspace, item.image_path, { name: item.name ?? previous?.name, role: item.role ?? previous?.role });
+          staged.push(asset.file);
+          if (previous) nextAssets[index] = { ...asset, id: previous.id };
+          else nextAssets.push(asset);
+        }
+        exec.signal.throwIfAborted();
+        await writeJson(path.join(directory, 'job.json'), { ...job, assets: nextAssets });
+      } catch (error) {
+        await Promise.all(staged.map(file => rm(path.join(directory, 'assets', file), { force: true })));
+        throw error;
+      }
+      job.assets = nextAssets;
+      return { result: JSON.stringify({ assets: job.assets.map(a => ({ ...a, src: `asset://${a.id}` })), next: '素材已更新。沿用原任务调用 submit_article，成功后交付新正文和预览；不要重新初始化或直接编辑 job.json。' }) };
     },
   }));
 
@@ -138,6 +180,7 @@ export async function apply(ctx, config = {}) {
       }
       await writeFile(path.join(directory, 'preview.html'), documentHtml(previewBody, args.title, { preview: true }));
       await log('正文 HTML 已通过检查并保存');
+      config.onSubmitted?.();
       if (!config.keepBuiltins) exec.concludeTurn();
       return { result: JSON.stringify({ status: 'validated', article: path.join(directory, 'article.html'), preview: path.join(directory, 'preview.html'), warnings: checked.warnings, next: config.keepBuiltins ? '现在用内置 present 交付这两个文件，结束本轮设计；用户提出修改后再继续。' : '结束本轮设计。' }) };
     },

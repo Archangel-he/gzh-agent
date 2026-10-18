@@ -1,3 +1,57 @@
+diff --git a/packages/bundle/web-app/README.i18n.yaml b/packages/bundle/web-app/README.i18n.yaml
+index 1d8e07a0..798cae76 100644
+--- a/packages/bundle/web-app/README.i18n.yaml
++++ b/packages/bundle/web-app/README.i18n.yaml
+@@ -21,8 +21,8 @@
+   en: e3cac911f080d8ef
+   zh: 60749e9f5c39c1bc
+ /deepseek-ai-dsh-web-app/use-this-package/configuration:
+-  en: b1787804544f2587
+-  zh: ce09d2c248ffd999
++  en: a1e8af8ba3866a77
++  zh: 942c9f0e9b475cbc
+ /deepseek-ai-dsh-web-app/use-this-package/listening-trust-and-public-deployments:
+   en: e6ddea1d2fc40501
+   zh: ff08b6fa3fc24136
+diff --git a/packages/bundle/web-app/README.md b/packages/bundle/web-app/README.md
+index 2305d402..59375fc0 100644
+--- a/packages/bundle/web-app/README.md
++++ b/packages/bundle/web-app/README.md
+@@ -48,6 +48,8 @@ Saved model selections override the composition default. The settings card accep
+ 
+ The `minimal` agent preset uses a persistent shell, the `read_image` tool, and a fixed persona, with automatic history compaction and the idle-session `/compact` command. It shares the Host token meter and owns an isolated compaction backend. [Compaction configuration and retention](../../compaction/compaction-basic/README.md#use-this-package) follow the existing backend. Image reads reuse the Host filesystem and attachment store and require an image-capable model; text read, write, and edit tools remain excluded.
+ 
++The Bloop launcher sets `BLOOP_PERFORMANCE=1`. In that composition only, the `standard` preset uses 8192 tokens of compaction headroom, a separate 2048-token summary cap, and no extra pressure-summary retry. A 131072-token model with a 16384-token request output reservation therefore starts pressure compaction at 104857 tokens. Other launches retain the backend defaults.
++
+ `--host` and `--port` configure the listener; `--tls-cert` and `--tls-key` make it serve HTTPS; `--public-url` names the advertised public HTTP(S) root the GUI is reached at behind a prefix-stripping proxy, and `--trusted-host` adds further accepted authorities. All are described under [Listening, trust, and public deployments](#public-deployments), and the `tls` field those flags set is documented with the [carrier's config](../../../docs/subsystems/web-server.md#config):
+ 
+ | Field | Default | Meaning |
+diff --git a/packages/bundle/web-app/README.zh.md b/packages/bundle/web-app/README.zh.md
+index 8d08ede8..502d4f01 100644
+--- a/packages/bundle/web-app/README.zh.md
++++ b/packages/bundle/web-app/README.zh.md
+@@ -48,6 +48,8 @@ dsh --profile web --no-open --port 8080
+ 
+ `minimal` agent preset 使用持久 Shell、`read_image` 工具和固定 persona，支持自动历史压缩以及会话空闲时的 `/compact` 命令。它复用 Host token meter，并拥有隔离的压缩后端。[压缩配置与保留策略](../../compaction/compaction-basic/README.zh.md#use-this-package) 沿用现有后端。图片读取复用 Host 文件系统和附件存储，要求模型支持图片输入；不加载文本读取、写入和编辑工具。
+ 
++Bloop 启动器设置 `BLOOP_PERFORMANCE=1`。仅在该组合下，`standard` preset 使用 8192 token 压缩余量、独立的 2048 token 摘要输出上限，并且不追加重试压力摘要。对于上下文为 131072 token、请求输出预留为 16384 token 的模型，压力压缩因此从 104857 token 开始触发。其他启动方式保留后端默认值。
++
+ `--host` 与 `--port` 配置监听器；`--tls-cert` 与 `--tls-key` 让它直接提供 HTTPS；`--public-url` 指定 GUI 在剥离前缀的代理之后对外公告的公开 HTTP(S) 根，`--trusted-host` 则添加更多被接受的 authority。这些都在[监听、信任与公开部署](#public-deployments)中说明，而这些 flag 设置的 `tls` 字段记录在[载体的配置](../../../docs/subsystems/web-server.zh.md#config)中：
+ 
+ | 字段 | 默认值 | 含义 |
+diff --git a/packages/bundle/web-app/presets/standard.patch.yml b/packages/bundle/web-app/presets/standard.patch.yml
+index 225a7569..04235004 100644
+--- a/packages/bundle/web-app/presets/standard.patch.yml
++++ b/packages/bundle/web-app/presets/standard.patch.yml
+@@ -72,6 +72,8 @@
+             config:
+               - id: compaction-basic
+                 name: '@deepseek-ai/dsh-compaction-basic'
++                config: !!js >
++                  process.env.BLOOP_PERFORMANCE === '1' ? { headroomTokens: 8192, maxTokens: 2048, compactionRetries: 0 } : {}
+               - id: command-compact
+                 name: '@deepseek-ai/dsh-command-compact'
+               - id: tool-result-pruner
 diff --git a/packages/client/locale/src/locales/en.ts b/packages/client/locale/src/locales/en.ts
 index b649bbc3..308cb64b 100644
 --- a/packages/client/locale/src/locales/en.ts
@@ -1614,3 +1668,194 @@ index 1662c1cd..15b55be3 100644
    it('prepares and selects the default Workspace after both startup baselines', async () => {
      const b = bench({ configureWorkspaces: (workspaces) => {
        workspaces.initializeDefault.mockImplementation(async () => {
+diff --git a/packages/compaction/compaction-basic/README.i18n.yaml b/packages/compaction/compaction-basic/README.i18n.yaml
+index c16287dd..9786678f 100644
+--- a/packages/compaction/compaction-basic/README.i18n.yaml
++++ b/packages/compaction/compaction-basic/README.i18n.yaml
+@@ -27,8 +27,8 @@
+   en: 3446c54c062d7e34
+   zh: fb502c941e508ae0
+ /deepseek-ai-dsh-compaction-basic/use-this-package/what-happens-when-condensation-runs:
+-  en: c872a8ef069596f0
+-  zh: b3a48e309ae830d4
++  en: c2d6fd46fbc7c4b5
++  zh: 8a5f8797fff650cf
+ /deepseek-ai-dsh-compaction-basic/use-this-package/on-demand-condensation-with-compact:
+   en: 4c5067e4c57ca708
+   zh: 1c0e70319b9b2112
+diff --git a/packages/compaction/compaction-basic/README.md b/packages/compaction/compaction-basic/README.md
+index 1207cd81..d59a96e8 100644
+--- a/packages/compaction/compaction-basic/README.md
++++ b/packages/compaction/compaction-basic/README.md
+@@ -81,6 +81,8 @@ Misconfiguration fails fast: unknown settings, duplicate per-model overrides, in
+ 
+ The oldest balanced span is replaced by one summary message and the recent tail stays verbatim; the conversation continues from the summary. The operation reports how many history items were condensed and the estimated tokens freed. If nothing can be condensed safely — for example the whole conversation is one indivisible unit — nothing changes and nothing is written to the session log. If no model is available to write the summary (no configured target and no routed request yet), condensation fails with a clear error telling you to configure the summarization provider and model or route one request.
+ 
++After any pressure summary attempt, the next pressure summary waits for at least `max(1, headroomTokens)` additional estimated tokens on the same session and routed target. Repeated unchanged steps therefore do not repeat an ineffective model call. This also prevents an ineffective summary that barely shrinks the surface from repeating on each step. Cancellation does not create a backoff. Provider-confirmed overflow and manual compaction bypass it.
++
+ ### On-demand condensation with /compact
+ 
+ With `dsh-command-compact` mounted, type `/compact` in a chat UI to condense immediately, even below the pressure threshold. The command reports how many history items were condensed and the estimated tokens saved. While the agent is mid-turn or condensation is already running, `/compact` reports that condensation is unavailable; prompts you send while it runs are accepted and start after it finishes.
+diff --git a/packages/compaction/compaction-basic/README.zh.md b/packages/compaction/compaction-basic/README.zh.md
+index 86cec3c9..86fccd79 100644
+--- a/packages/compaction/compaction-basic/README.zh.md
++++ b/packages/compaction/compaction-basic/README.zh.md
+@@ -81,6 +81,8 @@ kind: "package-reference"
+ 
+ 最旧的平衡范围会被替换为一条摘要消息，近期尾部保持逐字不变；对话从摘要继续。操作会报告压缩了多少历史项以及估算释放的 token 数。如果没有任何内容可以安全压缩——例如整个对话就是一个不可分单元——则不会有任何改变，也不会向会话日志写入任何内容。如果没有模型可以撰写摘要（既未配置目标，也还没有已路由请求），压缩会失败并给出清晰错误，提示你配置摘要提供方与模型，或先路由一次请求。
+ 
++每次压力摘要尝试后，同一会话、同一路由目标的下次压力摘要会等待估算上下文至少增加 `max(1, headroomTokens)` token。没有新增内容的后续步骤不会重复无效的模型调用。这也能防止只缩减少量内容的无效摘要逐步重复。取消不会产生等待状态。提供方确认溢出与手动压缩不受其影响。
++
+ ### 通过 /compact 按需压缩
+ 
+ 挂载 `dsh-command-compact` 后，在聊天 UI 中输入 `/compact` 即可立即压缩，即使未达到压力阈值。命令会报告压缩了多少历史项以及估算节省的 token 数。当 agent 正在轮次中或压缩已在运行时，`/compact` 会报告压缩暂不可用；运行期间你发送的提示词会被接受，并在压缩结束后才开始。
+diff --git a/packages/compaction/compaction-basic/src/index.ts b/packages/compaction/compaction-basic/src/index.ts
+index 163cec38..7250858a 100644
+--- a/packages/compaction/compaction-basic/src/index.ts
++++ b/packages/compaction/compaction-basic/src/index.ts
+@@ -133,6 +133,7 @@ export class BasicCompactionEngine extends CompactionEngine {
+   private readonly warnedPressureConfigTargets = new Set<string>()
+   private readonly overflowRetries = new WeakMap<Agent, number>()
+   private readonly overflowAgents = new WeakMap<Session, Agent>()
++  private readonly pressureRetryAt = new WeakMap<Session, { target: string; tokens: number }>()
+ 
+   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
+     super(ctx)
+@@ -326,24 +327,36 @@ export class BasicCompactionEngine extends CompactionEngine {
+     }
+     if (measurement.totalTokens < spec.thresholdTokens) return null
+ 
+-    let result: CompactionResult | null = null
+-    for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
+-      const range = selectCompactableRange(agent.session, measurement, spec.retainTokens)
+-      if (range === null) {
+-        /* v8 ignore else -- concrete replacement preserves a compactable checkpoint; subclass hooks cannot mutate it. */
+-        if (result === null) return null
+-        /* v8 ignore next -- paired with the defensive post-success branch above. */
+-        break
++    const retry = this.pressureRetryAt.get(agent.session)
++    if (retry?.target === targetKey && measurement.totalTokens < retry.tokens) return null
++
++    let attempted = false
++    try {
++      let result: CompactionResult | null = null
++      for (let attempt = 0; attempt <= spec.compactionRetries; attempt += 1) {
++        const range = selectCompactableRange(agent.session, measurement, spec.retainTokens)
++        if (range === null) {
++          /* v8 ignore else -- concrete replacement preserves a compactable checkpoint; subclass hooks cannot mutate it. */
++          if (result === null) return null
++          /* v8 ignore next -- paired with the defensive post-success branch above. */
++          break
++        }
++        attempted = true
++        result = await this.compactRegion(range.start, range.end, agent, signal)
++        measurement = meter.measure(agent.session)
++        if (measurement.totalTokens < spec.thresholdTokens) return result
+       }
+-      result = await this.compactRegion(range.start, range.end, agent, signal)
+-      measurement = meter.measure(agent.session)
+-      if (measurement.totalTokens < spec.thresholdTokens) return result
+-    }
+ 
+-    throw new Error(
+-      `compaction still above threshold after ${spec.compactionRetries + 1} compaction attempts `
+-      + `(${measurement.totalTokens} estimated tokens >= threshold ${spec.thresholdTokens})`,
+-    )
++      throw new Error(
++        `compaction still above threshold after ${spec.compactionRetries + 1} compaction attempts `
++        + `(${measurement.totalTokens} estimated tokens >= threshold ${spec.thresholdTokens})`,
++      )
++    } finally {
++      // A barely shrinking summary must not repeat on every step; overflow bypasses this guard.
++      if (attempted && !signal.aborted) this.pressureRetryAt.set(agent.session, {
++        target: targetKey, tokens: meter.measure(agent.session).totalTokens + Math.max(1, policy.headroomTokens),
++      })
++    }
+   }
+ 
+   /**
+diff --git a/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts b/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts
+index 3736aa5c..902880f7 100644
+--- a/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts
++++ b/packages/compaction/compaction-basic/tests/compaction-basic.spec.ts
+@@ -342,6 +342,14 @@ describe('compact configuration and defaults', () => {
+     }), target).maxTokens).toBe(32)
+   })
+ 
++  it('prices the Bloop 128K model with an 8K reserve and a separate 2K summary cap', () => {
++    const config = resolveConfig({ headroomTokens: 8192, maxTokens: 2048, compactionRetries: 0 })
++    const policy = resolveTargetPolicy(config, { provider: MODEL, model: MODEL })
++    expect(resolveCompactSpec(policy, 131072, 16384).thresholdTokens).toBe(Math.floor(131072 * 0.8))
++    expect(config.maxTokens).toBe(2048)
++    expect(config.compactionRetries).toBe(0)
++  })
++
+   it('rejects a zero summary cap inherited from headroom', () => {
+     expect(() => resolveConfig({ headroomTokens: 0 })).toThrow(/maxTokens.*positive integer/)
+     expect(() => resolveConfig({
+@@ -857,7 +865,64 @@ describe('pressure measurement and retention', () => {
+     vi.spyOn(compact, 'compactRegion').mockRejectedValueOnce(stop)
+ 
+     await expect(compactIfNeeded(compact, conversation(4))).rejects.toBe(stop)
+-    expect(measure).toHaveBeenCalledTimes(1)
++    expect(measure).toHaveBeenCalledTimes(2)
++  })
++
++  it('backs off failed pressure summaries until another headroom budget accumulates', async () => {
++    const ctx = createContext()
++    const compact = service({ ...compactConfig, headroomTokens: 100, compactionRetries: 0 }, ctx)
++    const session = conversation(4)
++    compact.error = new Error('summary was empty')
++    await expect(compactIfNeeded(compact, session)).rejects.toThrow('summary was empty')
++    for (let step = 0; step < 5; step += 1) expect(await compactIfNeeded(compact, session)).toBeNull()
++    expect(compact.calls).toHaveLength(1)
++    session.append('user/message', createUserMessage({
++      content: [{ type: 'text', text: 'new context '.repeat(200) }], source: { kind: 'user' },
++    }), { surfaceOp: 'append' })
++    await expect(compactIfNeeded(compact, session)).rejects.toThrow('summary was empty')
++    expect(compact.calls).toHaveLength(2)
++  })
++
++  it('also spaces successful pressure summaries when new work crosses the threshold again', async () => {
++    const ctx = createContext(10_000)
++    const compact = service({ ...compactConfig, headroomTokens: 8_000, compactionRetries: 0 }, ctx)
++    const session = conversation(4, 'fixture '.repeat(300))
++    expect(await compactIfNeeded(compact, session)).not.toBeNull()
++    const after = ctx.tokenMeter.measure(session)
++    const measure = vi.spyOn(ctx.tokenMeter, 'measure')
++    measure.mockReturnValue({ ...after, totalTokens: Math.max(2_001, after.totalTokens + 7_999) })
++    expect(await compactIfNeeded(compact, session)).toBeNull()
++    expect(compact.calls).toHaveLength(1)
++    measure.mockReturnValue({ ...after, totalTokens: after.totalTokens + 8_000 })
++    compact.error = new Error('next pressure attempt')
++    await expect(compactIfNeeded(compact, session)).rejects.toThrow('next pressure attempt')
++    expect(compact.calls).toHaveLength(2)
++  })
++
++  it('does not suppress provider-confirmed overflow after a failed pressure summary', async () => {
++    const compact = service({ ...compactConfig, headroomTokens: 100, compactionRetries: 0 })
++    const session = conversation(4)
++    compact.error = new Error('temporary summary failure')
++    await expect(compactIfNeeded(compact, session)).rejects.toThrow('temporary summary failure')
++    compact.error = undefined
++    expect(await compactIfNeeded(compact, session)).toBeNull()
++    expect(await compactIfNeeded(compact, session, 'context-overflow')).not.toBeNull()
++    expect(compact.calls).toHaveLength(2)
++  })
++
++  it('does not retain a pressure backoff after cancellation or a routed target change', async () => {
++    const compact = service({ ...compactConfig, headroomTokens: 100, compactionRetries: 0 })
++    const session = conversation(4)
++    const controller = new AbortController()
++    compact.mutateDuringSummary = () => controller.abort(new Error('cancelled'))
++    compact.error = new Error('cancelled')
++    await expect(compact.compactIfNeeded(agent(session, MODEL), 'pressure', controller.signal)).rejects.toThrow()
++    compact.mutateDuringSummary = undefined
++    await expect(compactIfNeeded(compact, session)).rejects.toThrow('cancelled')
++    expect(compact.calls).toHaveLength(2)
++    session.append('request/header', { header: { config: { provider: 'actual', model: 'actual' } }, reason: 'resume' })
++    await expect(compactIfNeeded(compact, session)).rejects.toThrow('cancelled')
++    expect(compact.calls).toHaveLength(3)
+   })
+ 
+   it('bounds retries when a shrinking checkpoint remains above threshold', async () => {
