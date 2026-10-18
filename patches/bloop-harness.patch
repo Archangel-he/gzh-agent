@@ -32,10 +32,10 @@ index d1968d50..62e0063f 100644
 +仅 Bloop 启用的 `bloop-glass.e2e.ts` 使用已编译的 Bloop 客户端，检查两种主题、新对话按钮指针缓冲与宠物实例连续性。先使用 `DSH_CLIENT_BLOOP=1` 构建，再选择该用例；原版构建会跳过。成功运行后，检查截图保存在 `.artifacts/bloop-glass/`。
 diff --git a/apps/web/tests/bloop-glass.e2e.ts b/apps/web/tests/bloop-glass.e2e.ts
 new file mode 100644
-index 00000000..874591fe
+index 00000000..eeb741a0
 --- /dev/null
 +++ b/apps/web/tests/bloop-glass.e2e.ts
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,73 @@
 +/** Bloop's built client: both palettes, hover buffer, full button hit box, and a resident avatar. */
 +import { mkdir } from 'node:fs/promises'
 +import { chromium } from 'playwright'
@@ -95,6 +95,13 @@ index 00000000..874591fe
 +    await mkdir('.artifacts/bloop-glass', { recursive: true })
 +    await page.screenshot({ path: `.artifacts/bloop-glass/${dark ? 'dark' : 'light'}.png` })
 +  }
++  const composer = page.locator('[data-composer-input][contenteditable="true"]')
++  expect(await composer.getAttribute('data-placeholder')).not.toContain('/')
++  await composer.fill('/')
++  await page.waitForTimeout(400)
++  expect(await page.getByRole('listbox').count()).toBe(0)
++  expect(await composer.innerText()).toBe('/')
++  await composer.fill('')
 +  await newTask.click()
 +  expect(await page.locator('[data-bloop][data-sidebar-collapsed]').count()).toBe(0)
 +  expect(await page.locator('[data-bloop-companion] svg').evaluate((node, previous) => node === previous, avatar)).toBe(true)
@@ -269,7 +276,7 @@ index 79cc930e..cc7ae62c 100644
      const { load } = renderLabel({
        blank: false,
 diff --git a/packages/client/ui-conversation/README.i18n.yaml b/packages/client/ui-conversation/README.i18n.yaml
-index 3b74b55d..f6debc56 100644
+index 3b74b55d..4c2e0465 100644
 --- a/packages/client/ui-conversation/README.i18n.yaml
 +++ b/packages/client/ui-conversation/README.i18n.yaml
 @@ -26,6 +26,12 @@
@@ -291,10 +298,10 @@ index 3b74b55d..f6debc56 100644
  /deepseek-ai-dsh-client-ui-conversation/known-limitations-and-deferred-work/dev-note:
 -  en: e67f633dc6fe7773
 -  zh: e88aeb617ffb74ea
-+  en: b0034028222602f1
-+  zh: d463fe22063428ac
++  en: f9342ef866800e1d
++  zh: 71a3b326f7fe1918
 diff --git a/packages/client/ui-conversation/README.md b/packages/client/ui-conversation/README.md
-index 1a0cb88b..3ee97c15 100644
+index 1a0cb88b..7493c042 100644
 --- a/packages/client/ui-conversation/README.md
 +++ b/packages/client/ui-conversation/README.md
 @@ -167,6 +167,16 @@ The selector must be a pure function of the owner currency. Its non-null return
@@ -314,14 +321,16 @@ index 1a0cb88b..3ee97c15 100644
  ## Model Experience
  
  None, as this package renders browser state and sends user-admitted inputs through Session Controller APIs without constructing model requests.
-@@ -192,3 +202,5 @@ None; Conversation assembly and browser input state do not alter provider-side p
+@@ -192,3 +202,7 @@ None; Conversation assembly and browser input state do not alter provider-side p
  None.
  
  </details>
 +
 +The companion lives in the frame-wide overlay rather than a session factory, so switching history preserves the same SVG and animation clock without another center-to-corner flight.
++
++Bloop builds suppress slash suggestion menus for both typed triggers and the programmatic launcher. Slash characters remain in the draft, and `@` file/session suggestions remain available. The Bloop composer hint no longer advertises slash commands.
 diff --git a/packages/client/ui-conversation/README.zh.md b/packages/client/ui-conversation/README.zh.md
-index ccef5969..d2a75f95 100644
+index ccef5969..eb5039ba 100644
 --- a/packages/client/ui-conversation/README.zh.md
 +++ b/packages/client/ui-conversation/README.zh.md
 @@ -167,6 +167,16 @@ selector 必须是 owner currency 的纯函数。非 null 返回值作为 `match
@@ -341,12 +350,14 @@ index ccef5969..d2a75f95 100644
  ## 模型体验
  
  无，因为本包渲染浏览器状态，并通过 Session Controller API 发送用户确认提交的输入，而不构造模型请求。
-@@ -192,3 +202,5 @@ selector 必须是 owner currency 的纯函数。非 null 返回值作为 `match
+@@ -192,3 +202,7 @@ selector 必须是 owner currency 的纯函数。非 null 返回值作为 `match
  无。
  
  </details>
 +
 +宠物常驻窗口覆盖层，不再放在随对话重建的工厂中，因此切换历史对话会保留同一个 SVG 与动画时钟，不会再次从中央飞向左上角。
++
++Bloop 构建禁用输入斜杠和程序触发的斜杠建议菜单。斜杠字符保留在草稿中，`@` 文件或对话建议继续可用。Bloop 输入框提示不再宣传斜杠指令。
 diff --git a/packages/client/ui-conversation/src/client/apply.ts b/packages/client/ui-conversation/src/client/apply.ts
 index e567bd1a..7a0bd51b 100644
 --- a/packages/client/ui-conversation/src/client/apply.ts
@@ -602,13 +613,14 @@ index a02f5aa6..ce84f358 100644
    selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
    /** Session-addressed composer block source, or the stable absent source. */
 diff --git a/packages/client/ui-conversation/src/client/locales.ts b/packages/client/ui-conversation/src/client/locales.ts
-index f1f70807..a5afe96d 100644
+index f1f70807..77e94f59 100644
 --- a/packages/client/ui-conversation/src/client/locales.ts
 +++ b/packages/client/ui-conversation/src/client/locales.ts
-@@ -9,6 +9,18 @@ const PLAN_NEXT_ACTION_EN = 'describe your task to generate plan'
+@@ -9,6 +9,19 @@ const PLAN_NEXT_ACTION_EN = 'describe your task to generate plan'
  
  /** Simplified Chinese dictionary (the key-set source of truth). */
  export const zh = {
++  'bloop.placeholder': '输入你的想法，或添加文件和图片',
 +  'bloop.hello.0': '嗨，和 Bloop 一起，让想法成形。',
 +  'bloop.hello.1': '给我一点文字，还你一点惊喜。',
 +  'bloop.hello.2': '新的一页，交给 Bloop。',
@@ -624,10 +636,11 @@ index f1f70807..a5afe96d 100644
    'shortcut.newline': '换行',
    'shortcut.complementary': '使用互补的 Queue／Steer 方式',
    'shortcut.slash': '打开命令菜单',
-@@ -389,6 +401,18 @@ export type ConversationKey = keyof typeof zh
+@@ -389,6 +402,19 @@ export type ConversationKey = keyof typeof zh
  
  /** English dictionary, checked complete against the zh key set. */
  export const en = {
++  'bloop.placeholder': 'Share your idea, or attach files and images',
 +  'bloop.hello.0': 'Hi, a little time with Bloop.',
 +  'bloop.hello.1': 'Your words. A little wonder.',
 +  'bloop.hello.2': 'A fresh page, a fresh idea.',
@@ -644,7 +657,7 @@ index f1f70807..a5afe96d 100644
    'shortcut.complementary': 'Use the complementary Queue / Steer action',
    'shortcut.slash': 'Open command menu',
 diff --git a/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx b/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx
-index 218082ae..b45444a0 100644
+index 218082ae..ef05b3d4 100644
 --- a/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx
 +++ b/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx
 @@ -1,4 +1,4 @@
@@ -707,7 +720,13 @@ index 218082ae..b45444a0 100644
        {sessionId === undefined ? null : <div className={css.heroOptions}>{renderSlot('conversation.hero.options', {})}</div>}
      </div>
    )
-@@ -163,8 +173,11 @@ export function ConversationContent(props: ConversationContentProps) {
+@@ -158,13 +168,16 @@ export function ConversationContent(props: ConversationContentProps) {
+         // block keeps the model seat live because choosing a model is how the
+         // user clears it.
+         ? { blocked: composerBlock, placeholder: composerBlock.reason }
+-        : hero ? { placeholder: t('placeholder.hero') } : {}),
++        : hero ? { placeholder: t(bloop ? 'bloop.placeholder' : 'placeholder.hero') } : {}),
+   })
  
    const composerBar = (
      <div className={clsx(css.composerStack, hero && css.composerHero)}>
@@ -777,7 +796,7 @@ index ea3fd4ce..373cba35 100644
    const conversation = useConversation(s => s)
    const viewRequest = useStore(s => s.viewRequest ?? null)
 diff --git a/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx b/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx
-index ef957965..ed930d95 100644
+index ef957965..f44e7e8c 100644
 --- a/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx
 +++ b/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx
 @@ -17,7 +17,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
@@ -797,6 +816,15 @@ index ef957965..ed930d95 100644
    const input = useInput(s => s)
    const notice = useNotices(s => s)
    const busyEnter = useBusyEnter(s => s)
+@@ -369,7 +370,7 @@ export const InputBar = memo(function InputBar({
+       // (the gate never consults plan mode), so the actionable hint wins.
+       : canSteerQueue
+         ? t('placeholder.steerQueue')
+-        : planActive ? t('placeholder.plan') : t('placeholder.default'))
++        : planActive ? t('placeholder.plan') : t(bloop ? 'bloop.placeholder' : 'placeholder.default'))
+ 
+   return (
+     <div className={clsx(css.root, variant === 'hero' && css.hero)}>
 @@ -438,18 +439,18 @@ export const InputBar = memo(function InputBar({
          />
          <div ref={rowRef} className={css.row}>
@@ -1052,6 +1080,107 @@ index 0339eebb..b10a3406 100644
      "rootDir": "src",
      "outDir": "lib/types",
      "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+diff --git a/packages/client/ui-input-trigger/README.i18n.yaml b/packages/client/ui-input-trigger/README.i18n.yaml
+index ea7938c6..886752d6 100644
+--- a/packages/client/ui-input-trigger/README.i18n.yaml
++++ b/packages/client/ui-input-trigger/README.i18n.yaml
+@@ -36,5 +36,5 @@
+   en: 560e5df72c0fb698
+   zh: ed6fa149bc90258a
+ /deepseek-ai-dsh-client-ui-input-trigger/known-limitations-and-deferred-work/dev-note:
+-  en: e67f633dc6fe7773
+-  zh: 3bb0c20c93f16f98
++  en: c8c0c47c7a17b0c3
++  zh: 3a5c2f3c73a92db7
+diff --git a/packages/client/ui-input-trigger/README.md b/packages/client/ui-input-trigger/README.md
+index 31f44e13..ef6d5a97 100644
+--- a/packages/client/ui-input-trigger/README.md
++++ b/packages/client/ui-input-trigger/README.md
+@@ -89,3 +89,5 @@ These limits define the current trigger pipeline. They are current package const
+ None.
+ 
+ </details>
++
++Bloop builds suppress slash suggestion menus for both typed triggers and the programmatic launcher. Slash characters remain in the draft, and `@` file/session suggestions remain available. The Bloop composer hint no longer advertises slash commands.
+diff --git a/packages/client/ui-input-trigger/README.zh.md b/packages/client/ui-input-trigger/README.zh.md
+index b27a0681..af4c3e27 100644
+--- a/packages/client/ui-input-trigger/README.zh.md
++++ b/packages/client/ui-input-trigger/README.zh.md
+@@ -89,3 +89,5 @@ kind: "package-reference"
+ 无。
+ 
+ </details>
++
++Bloop 构建禁用输入斜杠和程序触发的斜杠建议菜单。斜杠字符保留在草稿中，`@` 文件或对话建议继续可用。Bloop 输入框提示不再宣传斜杠指令。
+diff --git a/packages/client/ui-input-trigger/src/client/controller.ts b/packages/client/ui-input-trigger/src/client/controller.ts
+index d2f1b444..cfc3b6e0 100644
+--- a/packages/client/ui-input-trigger/src/client/controller.ts
++++ b/packages/client/ui-input-trigger/src/client/controller.ts
+@@ -127,14 +127,15 @@ export class InputTriggerController {
+     if (this.disposed) return
+     const launched = this.launcher.getSnapshot() !== null
+     this.clearLauncher()
+-    const raw = detectTrigger(draft, caret, guard)
++    const detected = detectTrigger(draft, caret, guard)
++    const raw = process.env.DSH_CLIENT_BLOOP === '1' && detected?.trigger === '/' ? null : detected
+     if (raw === null) {
+       // A launcher-opened menu is opened by a gesture, not by a typed token:
+       // the focus it takes to drive it with the keyboard re-tracks an empty
+       // draft right away, and that track must not close what the gesture
+       // opened. The launcher flag is cleared here, so this holds for that one
+       // follow-up track only; typing or picking takes over from there.
+-      if (launched) return
++      if (launched && detected === null) return
+       this.hit = null
+       // A frozen-tier track is the submit gesture's own bookkeeping, not a new
+       // intent from the user: a command submitted after a dismissal must not
+@@ -186,6 +187,10 @@ export class InputTriggerController {
+    */
+   toggleSource(source: string, hit: TriggerHit): void {
+     if (this.disposed) return
++    if (process.env.DSH_CLIENT_BLOOP === '1' && hit.trigger === '/') {
++      this.dismiss()
++      return
++    }
+     if (this.launcher.getSnapshot() === source && this.menu.getSnapshot().open) {
+       this.dismiss()
+       return
+diff --git a/packages/client/ui-input-trigger/tests/service.client.spec.ts b/packages/client/ui-input-trigger/tests/service.client.spec.ts
+index 15afb07c..568268b8 100644
+--- a/packages/client/ui-input-trigger/tests/service.client.spec.ts
++++ b/packages/client/ui-input-trigger/tests/service.client.spec.ts
+@@ -1336,3 +1336,31 @@ describe('reference activation', () => {
+     expect(controller.openReference('skill', { ref: '/review' })).toBe(false)
+   })
+ })
++
++
++it('does not open slash menus in Bloop while keeping mentions available', async () => {
++  vi.stubEnv('DSH_CLIENT_BLOOP', '1')
++  const slash = deferredSource('/', 'command')
++  const mention = readySource('@', 'file', [{ name: 'image.png' }])
++  const { controller } = controllerBench([slash.source, mention.source])
++  try {
++    controller.track('/goal', 5, { tier: 'plain' }, 1)
++    await tick()
++    expect(controller.menu.getSnapshot().open).toBe(false)
++    expect(slash.pending).toHaveLength(0)
++    controller.toggleSource('command', {
++      trigger: '/', query: '', quoted: false, position: 'leading',
++      span: { start: 0, end: 0, draftRev: 1 },
++    })
++    expect(controller.menu.getSnapshot().open).toBe(false)
++    expect(slash.pending).toHaveLength(0)
++    controller.track('@i', 2, { tier: 'plain' }, 2)
++    await tick()
++    expect(controller.menu.getSnapshot().open).toBe(true)
++    controller.track('/', 1, { tier: 'plain' }, 3)
++    expect(controller.menu.getSnapshot().open).toBe(false)
++  } finally {
++    controller.dispose()
++    vi.unstubAllEnvs()
++  }
++})
 diff --git a/packages/client/ui-layout/README.i18n.yaml b/packages/client/ui-layout/README.i18n.yaml
 index 4ad7481e..2708894e 100644
 --- a/packages/client/ui-layout/README.i18n.yaml
