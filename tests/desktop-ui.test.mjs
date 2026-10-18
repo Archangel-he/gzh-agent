@@ -16,7 +16,7 @@ async function fixture(t) {
   await mkdir(directory, { recursive: true });
   const job = { assets: [], text: '正文', instruction: '保留' };
   await writeJson(path.join(directory, 'job.json'), job);
-  const submit = title => commitArticle(directory, { html: `<section><p>${title}</p></section>`, preview: `<html><body><div class="toolbar">不要复制工具栏</div><article><section style="color: #123456"><p>${title}</p><script>throw 1</script><img src="data:image/png;base64,AAAA" onerror="bad()"></section></article></body></html>`, submission: { title, warnings: [] }, job });
+  const submit = title => commitArticle(directory, { html: `<section><p>${title}</p></section>`, preview: `<html><body><div class="toolbar">不要复制工具栏</div><article><section style="color: #123456"><p>${title}</p><script>throw 1</script><img src="data:image/png;base64,AAAA" style="border-radius:16px;object-fit:cover;margin:8px auto;" onerror="bad()"></section></article></body></html>`, submission: { title, warnings: [] }, job });
   return { root, directory, job, submit, ui: createDesktopUi(root) };
 }
 
@@ -33,6 +33,8 @@ test('fixed deliveries survive editing, native export excludes active content, a
   assert.match(copied.html, /第一版/);
   assert.match(copied.html, /style="color:\s*#123456"/);
   assert.match(copied.html, /data:image\/png/);
+  assert.match(copied.html, /border-radius:16px/);
+  assert.match(copied.html, /object-fit:cover/);
   assert.doesNotMatch(copied.html, /script|onerror|不要复制/);
   await writeUiSession(root, 'session', {phase: 'running', stage: 'vision'});
   await assert.rejects(ui.request('restore', {path: first.preview, version: first.version, sessionId: 'session'}), /任务正在运行/);

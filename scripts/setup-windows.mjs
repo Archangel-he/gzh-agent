@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { access, copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -15,6 +15,30 @@ function run(command, args, cwd = source, env = process.env) {
   if (result.status !== 0) throw new Error(`${command} exited with ${result.status ?? result.signal}`);
 }
 
+/* schannel cannot always use the Windows certificate store (SEC_E_NO_CREDENTIALS),
+   so Git for Windows' bundled OpenSSL backend is forced. An optional data/proxy.txt
+   or HTTPS_PROXY routes the GitHub fetch through a proxy when one is required. */
+async function resolveProxy() {
+  try {
+    const value = (await readFile(path.join(root, 'data', 'proxy.txt'), 'utf8')).trim();
+    if (value) return value;
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  return process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || '';
+}
+
+export async function cloneHarness(pin, gitNet, directory = source) {
+  // Preserve failed checkouts and local commits before replacing the runtime.
+  const backup = `${directory}.backup-${randomUUID()}`;
+  try { await rename(directory, backup); console.log(`Previous Harness checkout preserved at ${backup}`); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await mkdir(directory, { recursive: true });
+  run('git', [...gitNet, 'init'], directory);
+  run('git', [...gitNet, 'config', 'core.autocrlf', 'false'], directory);
+  run('git', [...gitNet, 'remote', 'add', 'origin', pin.repository], directory);
+  run('git', [...gitNet, 'fetch', '--depth=1', 'origin', pin.commit], directory);
+  run('git', [...gitNet, 'checkout', '--detach', 'FETCH_HEAD'], directory);
+}
+
 /** Prepare the Windows development runtime; all private state stays in data/. */
 export async function setupWindows() {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('This launcher requires Windows x64.');
@@ -22,26 +46,38 @@ export async function setupWindows() {
   const pin = JSON.parse(await readFile(path.join(root, 'harness.json'), 'utf8'));
   const patchFile = path.join(root, 'patches', 'bloop-harness.patch');
   const patch = await readFile(patchFile);
+  const proxy = await resolveProxy();
+  const gitNet = ['-c', 'http.sslBackend=openssl', ...(proxy ? ['-c', `http.proxy=${proxy}`, '-c', `https.proxy=${proxy}`] : [])];
   await mkdir(path.dirname(source), { recursive: true });
-  try { await access(path.join(source, '.git')); }
-  catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    await mkdir(source, { recursive: true });
-    run('git', ['init']);
-    run('git', ['config', 'core.autocrlf', 'false']);
-    run('git', ['remote', 'add', 'origin', pin.repository]);
-    run('git', ['fetch', '--depth=1', 'origin', pin.commit]);
-    run('git', ['checkout', '--detach', 'FETCH_HEAD']);
+  const headOf = () => spawnSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' });
+  let head = headOf();
+  if (head.status !== 0 || head.stdout.trim() !== pin.commit) {
+    const status = spawnSync('git', ['status', '--porcelain'], { cwd: source, encoding: 'utf8' });
+    const pristine = status.status === 0 && status.stdout.trim() === '';
+    const hasGit = await access(path.join(source, '.git')).then(() => true, () => false);
+    if (hasGit && !pristine) {
+      try {
+        run('git', [...gitNet, 'fetch', '--depth=1', 'origin', pin.commit]);
+        run('git', [...gitNet, 'checkout', '--detach', 'FETCH_HEAD']);
+      } catch {
+        throw new Error('data/harness-source has local changes and cannot move to the pinned commit; move that folder away and run the launcher again.');
+      }
+    } else {
+      await cloneHarness(pin, gitNet);
+    }
+    head = headOf();
   }
-  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' });
-  if (head.status !== 0 || head.stdout.trim() !== pin.commit) throw new Error('Harness checkout differs from harness.json; preserve your changes before replacing data/harness-source.');
+  if (head.status !== 0 || head.stdout.trim() !== pin.commit) throw new Error(`Harness checkout does not match harness.json after re-cloning; check network access to ${pin.repository}.`);
   const reverse = spawnSync('git', ['apply', '--reverse', '--check', patchFile], { cwd: source, stdio: 'ignore' });
   if (reverse.status !== 0) run('git', ['apply', '--check', patchFile]);
   if (reverse.status !== 0) run('git', ['apply', patchFile]);
 
   const pnpm = path.join(path.dirname(require.resolve('pnpm')), 'bin', 'pnpm.cjs');
   const env = { ...process.env, DSH_CLIENT_BLOOP: '1', DSH_CLIENT_TITLE: 'Bloop', DSH_CLIENT_WORKSPACE_PATH: root,
-    DSH_DESKTOP_TARGET_PLATFORM: 'win32', DSH_DESKTOP_TARGET_ARCH: 'x64' };
+    DSH_DESKTOP_TARGET_PLATFORM: 'win32', DSH_DESKTOP_TARGET_ARCH: 'x64',
+    // GitHub release downloads are blocked on some networks; the mirror keeps rebuilds working.
+    ELECTRON_MIRROR: process.env.ELECTRON_MIRROR || 'https://npmmirror.com/mirrors/electron/',
+    ...(proxy ? { HTTPS_PROXY: proxy, https_proxy: proxy, HTTP_PROXY: proxy, http_proxy: proxy } : {}) };
   const fingerprint = createHash('sha256').update(patch).update(root).update(pin.commit).digest('hex');
   const stamp = path.join(root, 'data', 'windows-build.json');
   let previous;

@@ -57,6 +57,7 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     inject(services, callback) { assert.ok(services.includes('workingDirectory')); return callback(ctx); },
     on(name, fn) { handlers.set(name, [...(handlers.get(name) || []), fn]); },
     tools: { register(definition) { tools.set(definition.name, definition); }, restrict() { assert.fail('desktop must retain builtin tools'); } },
+    permissionPresets: { set(session, preset) { assert.equal(preset, 'danger-full-access'); assert.equal(session.id, 'desktop-fixture'); } },
     systemPrompt: { section(section) { assert.equal(typeof section.text, 'string'); workflow = section.text; } },
     workingDirectory: { async ensure() { return directory; } },
     attachments: { async readImage(ref) { return { ref, data: image }; }, async saveImage(ref) { return ref; } },
@@ -74,7 +75,13 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     const source = '这是一段需要完整保留、用于验证公众号设计交付的原始正文。';
     const prepared = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。' }, exec)).result);
     assert.equal(prepared.assets.length, 1);
-    assert.equal(tools.size, 8);
+    assert.equal(tools.size, 9);
+    const reference = tools.get('gzh_design_reference');
+    assert.match((await reference.execute({ topic: 'index' }, exec)).result, /文章配方/);
+    await assert.rejects(tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p></section>`, notes: '未审稿' }, exec), /提交前请先调用/);
+    await reference.execute({ topic: 'review' }, exec);
+    await assert.rejects(reference.execute({ topic: '../settings.json' }, exec), /未知设计参考|must be one of/);
+    await assert.rejects(reference.execute({ topic: 'index' }, { ...exec, agent: { session: { id: 'child' } } }), /主 Agent/);
     assert.ok(tools.has('bash') && tools.has('present'));
     await tools.get('inspect_images').execute({ focus: '识别主体' }, exec);
     assert.equal(activation.delivery, 'caller');
@@ -83,11 +90,13 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     const asset = prepared.assets[0];
     for (let turn = 1; turn <= 4; turn++) {
       await emit('session/event', agent.session, { type: 'turn/start', data: { turn } });
-      await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p><img src="asset://${asset.id}" alt="测试图"/><p>第 ${turn} 版。</p></section>`, notes: '测试交付' }, exec);
+      await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p><img src="asset://${asset.id}" alt="测试图" style="border-radius:16px;width:80%;margin:8px auto;"/><p>第 ${turn} 版。</p></section>`, notes: '测试交付' }, exec);
     }
     assert.equal((await readdir(path.join(prepared.directory, 'revisions'))).length, 4);
     assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), /第 4 版/);
     assert.match(await readFile(path.join(prepared.directory, 'preview.html'), 'utf8'), /src="data:image\/png;base64,/);
+    assert.match(await readFile(path.join(prepared.directory, 'preview.html'), 'utf8'), /border-radius:16px/);
+    assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), /margin:8px auto/);
     await assert.rejects(tools.get('submit_article').execute({ title: '验证文章', html: '<section><p>被删掉的正文。</p></section>', notes: '' }, exec));
     assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), /第 4 版/);
     await emit('session/event', agent.session, { type: 'turn/start', data: { turn: 5 } });
@@ -123,10 +132,14 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     const appended = JSON.parse((await update.execute({ updates: [{ image_path: replacement, name: '新增' }] }, exec)).result);
     assert.equal(appended.assets.length, 2);
     await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p>${appended.assets.map(a => `<img src="asset://${a.id}" alt="测试图"/>`).join('')}</section>`, notes: '素材更新' }, exec);
-    assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), new RegExp(chatUpdate.assets[0].file));
+    assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), /src="data:image\/png;base64,/);
+    assert.ok(!(await readFile(path.join(prepared.directory, 'article.html'), 'utf8')).includes('src="assets/'));
     assert.equal((await readdir(path.join(prepared.directory, 'revisions'))).length, 5);
     const again = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: '不能覆盖', instruction: '' }, exec)).result);
     assert.equal(again.directory, prepared.directory); assert.equal(again.assets.length, 2);
+    assert.equal(again.previous_design_notes, '素材更新');
+    assert.ok(!again.previous_html.includes('base64,'));
+    assert.ok(again.previous_html.includes(`asset://${asset.id}`));
     assert.equal(JSON.parse(await readFile(path.join(prepared.directory, 'job.json'))).text, source);
     // Recreate the plugin as on app restart; durable tool results recover the task.
     handlers.clear();

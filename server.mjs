@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile, writeFile, mkdir, readdir, copyFile, appendFile } from 'node:fs/promises';
 import { settings, publicSettings, updateSettings, writeJson, readJson, saveImage, dataRoot, projectRoot } from './lib/storage.mjs';
 import { runHarness } from './lib/harness.mjs';
-import { demoArticle, documentHtml, validateArticle, themes } from './lib/article.mjs';
+import { demoArticle, documentHtml, validateArticle, themes, articleBody } from './lib/article.mjs';
+import { embedArticleImages, restoreArticleImageReferences } from './lib/article-images.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const active = new Map();
@@ -52,14 +53,12 @@ async function finishJob(id, config) {
     } else submission = await runHarness(directory, config, controller.signal, value => { runtime = value; });
     controller.signal.throwIfAborted();
     const current = await readJson(path.join(directory, 'job.json'));
-    const checked = validateArticle(await readFile(path.join(directory, 'article.html'), 'utf8'), { assets: current.assets, source: current.text });
+    const stored = await restoreArticleImageReferences(await readFile(path.join(directory, 'article.html'), 'utf8'), directory, current.assets);
+    const checked = validateArticle(stored, { assets: current.assets, source: current.text });
     if (checked.errors.length) throw new Error(checked.errors.join('\n'));
-    // Check actual saved assets, not only model-provided filenames.
-    for (const asset of current.assets.filter(a => checked.html.includes('assets/' + a.file))) {
-      const bytes = await readFile(path.join(directory, 'assets', asset.file));
-      if (!bytes.length) throw new Error('文章引用了空图片。');
-    }
-    await writeFile(path.join(directory, 'preview.html'), documentHtml(checked.html, submission.title, { preview: true }));
+    const embedded = await embedArticleImages(checked.html, directory, current.assets);
+    await writeFile(path.join(directory, 'article.html'), documentHtml(embedded, submission.title));
+    await writeFile(path.join(directory, 'preview.html'), documentHtml(embedded, submission.title, { preview: true }));
     await setStatus('completed', { title: submission.title, notes: submission.notes, warnings: [...new Set([...checked.warnings, ...(submission.warnings || [])])] });
   } catch (error) {
     const message = errorText(controller.signal.aborted ? controller.signal.reason || error : error);
@@ -118,7 +117,7 @@ export function createServer() {
         if (input.previousId) {
           const previous = await viewJob(input.previousId);
           if (previous.status !== 'completed') throw new Error('只能基于已完成的文章创建新版本。');
-          job.previousHtml = await readFile(path.join(projectRoot(previous.id), 'article.html'), 'utf8');
+          job.previousHtml = await restoreArticleImageReferences(await readFile(path.join(projectRoot(previous.id), 'article.html'), 'utf8'), projectRoot(previous.id), previous.assets);
           if (!text) job.text = previous.text;
           for (const asset of previous.assets) { await copyFile(path.join(projectRoot(previous.id), 'assets', asset.file), path.join(directory, 'assets', asset.file)); assets.push(asset); }
         }
@@ -137,13 +136,9 @@ export function createServer() {
       if (match && req.method === 'GET' && match[2] === '/export') {
         const job = await viewJob(match[1]);
         if (job.status !== 'completed') throw new Error('文章尚未完成。');
-        let html = await readFile(path.join(projectRoot(job.id), 'article.html'), 'utf8');
-        for (const asset of job.assets) {
-          const bytes = await readFile(path.join(projectRoot(job.id), 'assets', asset.file));
-          html = html.replaceAll(`assets/${asset.file}`, 'data:image/png;base64,' + bytes.toString('base64'));
-        }
+        const html = await embedArticleImages(await readFile(path.join(projectRoot(job.id), 'article.html'), 'utf8'), projectRoot(job.id), job.assets);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': 'attachment; filename="article.html"' });
-        return res.end(documentHtml(html, job.title));
+        return res.end(documentHtml(articleBody(html), job.title));
       }
       if (match && req.method === 'GET' && !match[2]) return json(res, 200, await viewJob(match[1]));
       const file = /^\/files\/([a-f0-9-]{36})\/(article\.html|preview\.html|assets\/[a-f0-9-]{36}\.png)$/.exec(pathname);

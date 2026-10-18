@@ -27,7 +27,8 @@ test('local HTTP flow saves, previews and exports an article with embedded image
     for (let i = 0; i < 100; i++) { job = await (await fetch(base + '/api/projects/' + id)).json(); if (!['queued', 'running'].includes(job.status)) break; await new Promise(resolve => setTimeout(resolve, 20)); }
     assert.equal(job.status, 'completed', job.error);
     const html = await (await fetch(base + '/files/' + id + '/article.html')).text();
-    assert.match(html, /assets\/[a-f0-9-]+\.png/);
+    assert.match(html, /data:image\/png;base64,/);
+    assert.ok(!html.includes('src="assets/'));
     const exported = await (await fetch(base + '/api/projects/' + id + '/export')).text();
     assert.match(exported, /data:image\/png;base64,/);
     assert.match(exported, /这是一段需要完整保留的活动介绍正文/);

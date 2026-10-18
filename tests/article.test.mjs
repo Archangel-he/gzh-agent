@@ -22,6 +22,23 @@ test('preserves a valid original article and maps only registered image IDs', ()
   assert.match(result.html, /style=/);
   assert.ok(!documentHtml(result.html, '<标题>').includes('<title><标题>'));
 });
+test('image design survives validation while defaults and security checks remain active', () => {
+  const assets = [{ id: 'photo', file: 'photo.png', role: 'article' }];
+  const body = '<section><p>这是一段需要完整保留的原文内容。</p>';
+  const result = validateArticle(body + '<img src="asset://photo" style="width:80%;max-width:90%;height:180px;border-radius:16px;margin:8px auto;border:1px solid #ddd;object-fit:cover;object-position:50% 40%;aspect-ratio:4/3;box-shadow:0 4px 12px rgba(0,0,0,.1);opacity:.95;overflow:hidden;"></section>', { assets });
+  assert.deepEqual(result.errors, []);
+  for (const declaration of ['width:80%', 'max-width:90%', 'height:180px', 'border-radius:16px', 'margin:8px auto', 'border:1px solid #ddd', 'object-fit:cover', 'object-position:50% 40%', 'aspect-ratio:4/3', 'box-shadow:0 4px 12px rgba(0,0,0,.1)', 'opacity:.95', 'overflow:hidden']) assert.ok(result.html.includes(declaration), declaration);
+  assert.ok(result.html.lastIndexOf('margin:8px auto') > result.html.lastIndexOf('margin:18px auto'));
+  const defaults = validateArticle(body + '<img src="asset://photo"></section>', { assets });
+  for (const declaration of ['max-width:100%', 'height:auto', 'display:block', 'margin:18px auto']) assert.ok(defaults.html.includes(declaration));
+  assert.ok(validateArticle(body + '<img src="asset://photo" style="position:absolute;"></section>', { assets }).errors.length);
+  const unsafe = validateArticle(body + '<img src="asset://photo" style="border-radius:12px;behavior:url(evil);background:url(javascript:evil);" onerror="evil()"></section>', { assets });
+  assert.ok(unsafe.errors.length);
+  assert.ok(!unsafe.html.includes('onerror'));
+  assert.ok(!unsafe.html.includes('javascript:'));
+  assert.ok(!unsafe.html.includes('behavior:'));
+  assert.ok(unsafe.html.includes('border-radius:12px'));
+});
 test('settings redact secrets, preserve blank fields and reject credential-bearing URLs', () => {
   const first = updateSettings(defaultSettings, { main: { apiKey: 'test-secret' } });
   assert.equal(publicSettings(first).main.apiKey, '');

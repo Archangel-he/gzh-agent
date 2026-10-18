@@ -1141,7 +1141,7 @@ index 00000000..b3885270
 +.panel button { border: 0; padding: 4px 6px; border-radius: var(--dsw-radius-md); color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1); cursor: pointer; }
 diff --git a/packages/client/ui-conversation/src/client/bloop/BloopTaskPanel.tsx b/packages/client/ui-conversation/src/client/bloop/BloopTaskPanel.tsx
 new file mode 100644
-index 00000000..af582cb8
+index 00000000..0d0ae47d
 --- /dev/null
 +++ b/packages/client/ui-conversation/src/client/bloop/BloopTaskPanel.tsx
 @@ -0,0 +1,42 @@
@@ -1181,7 +1181,7 @@ index 00000000..af582cb8
 +  const label = failed ? t('bloop.status.error') : waiting ? t('bloop.status.waiting')
 +    : running ? t(`bloop.status.${stage}`) : t(`bloop.status.${phase}`)
 +  return <div className={css.panel} data-bloop-task>
-+    {!hero && <div role="status" aria-live="polite">{unavailable ? t('bloop.failed') : label}
++    {!hero && (running || failed || waiting || unavailable || phase !== 'idle') && <div role="status" aria-live="polite">{unavailable ? t('bloop.failed') : label}
 +      {result?.article && <span>{t('bloop.current')} · {result.article.currentVersion}</span>}
 +    </div>}
 +    {hero && result?.capabilities?.imageConfigured === false && <small>{t('bloop.imageMissing')}</small>}
@@ -1736,6 +1736,32 @@ index 00000000..469fd98d
 +  expect(avatar.dataset.bloopPose).toBe('egg')
 +  view.unmount()
 +  expect(callbacks.size).toBe(0)
++})
+diff --git a/packages/client/ui-conversation/tests/bloop-task-panel.client.spec.tsx b/packages/client/ui-conversation/tests/bloop-task-panel.client.spec.tsx
+new file mode 100644
+index 00000000..23ca580a
+--- /dev/null
++++ b/packages/client/ui-conversation/tests/bloop-task-panel.client.spec.tsx
+@@ -0,0 +1,20 @@
++// @vitest-environment jsdom
++import { afterEach, expect, it } from 'vitest'
++import { act, cleanup, render } from '@testing-library/react'
++import type { BloopClient } from '@deepseek-ai/dsh-client-ui-primitives'
++import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
++import { BloopTaskPanel } from '../src/client/bloop/BloopTaskPanel.tsx'
++
++afterEach(cleanup)
++
++it('omits the idle hint while retaining actual task progress', async () => {
++  const client: BloopClient = { request: async () => ({phase: 'idle', stage: 'preparing'}) }
++  const t: TranslateNS<'conversation'> = key => key
++  const props = {client, sessionId: 'fixture', running: false, failed: false, waiting: false, hero: false, t}
++  const view = render(<BloopTaskPanel {...props} />)
++  await act(async () => {})
++  expect(view.queryByRole('status')).toBeNull()
++  view.rerender(<BloopTaskPanel {...props} running />)
++  await act(async () => {})
++  expect(view.getByRole('status').textContent).toBe('bloop.status.preparing')
 +})
 diff --git a/packages/client/ui-conversation/tests/input-bar.client.spec.tsx b/packages/client/ui-conversation/tests/input-bar.client.spec.tsx
 index 4ee04fe8..8fcb9534 100644

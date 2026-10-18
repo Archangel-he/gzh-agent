@@ -5,6 +5,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools';
 import { commitArticle, importLegacyArticle } from './lib/article-revisions.mjs';
 import { validateArticle, documentHtml } from './lib/article.mjs';
 import { saveImage, saveWorkspaceImage, readJson, writeJson } from './lib/storage.mjs';
+import { DESIGN_REFERENCES, readDesignReference } from './lib/design-guidance.mjs';
 
 export const name = 'gzh-agent-tools';
 export const inject = ['tools', 'subagents', 'attachments'];
@@ -15,6 +16,7 @@ export async function apply(ctx, config = {}) {
   const job = await readJson(path.join(directory, 'job.json'));
   const imageConfig = config.imageConfig || JSON.parse(process.env.GZH_IMAGE_CONFIG || '{}');
   let rootId = config.rootId, visionCalls = 0, imageCalls = 0, submissions = 0;
+  let reviewRead = false;
   ctx.on('session/event', (session, event) => {
     if (session.id === rootId && event.type === 'turn/start') { visionCalls = 0; imageCalls = 0; submissions = 0; }
   });
@@ -29,9 +31,23 @@ export async function apply(ctx, config = {}) {
   if (!config.keepBuiltins) {
     ctx.on('agent/created', ({ agent }) => {
       if (!rootId) rootId = agent.session.id;
-      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['inspect_images', 'generate_image', 'update_article_assets', 'submit_article'] : [] });
+      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['gzh_design_reference', 'inspect_images', 'generate_image', 'update_article_assets', 'submit_article'] : [] });
     });
   }
+
+  ctx.tools.register(defineTool({
+    name: 'gzh_design_reference',
+    description: '按需读取 Bloop 内置公众号设计参考。新设计先读 index，再读所选主题及 components；有配图读 images，交付前读 review。同一参考已在上下文中则复用，不重复读取；不读取源码或密钥。',
+    parameters: { topic: { type: 'string', enum: Object.keys(DESIGN_REFERENCES), required: true, description: 'index 主题与文章配方；editorial/warm/brief/campus 主题；components 公共组件；images 配图；review 审稿。其他专题仅按需读取。' } },
+    output: textOutput,
+    async execute(args, exec) {
+      await rootOnly(exec);
+      const reference = await readDesignReference(args.topic);
+      await log(`设计参考：${args.topic}`);
+      if (args.topic === 'review') reviewRead = true;
+      return { result: reference };
+    },
+  }));
 
   async function child(exec, label, prompt, provider) {
     await log(`${label}：已启动 Harness 子 Agent`);
@@ -170,11 +186,12 @@ export async function apply(ctx, config = {}) {
     parameters: {
       title: { type: 'string', required: true, description: '文章标题。' },
       html: { type: 'string', required: true, description: '纯 section 正文片段，内联样式，图片引用 asset://素材ID。' },
-      notes: { type: 'string', required: true, description: '设计决策、已执行的子任务及未解决限制。' },
+      notes: { type: 'string', required: true, description: '本篇类型、主题与色彩/文字层级、图片用途；实际执行的检查及未解决限制。只记录已完成的检查，不预先宣称视觉验证成功。后续修改据此延续设计。' },
     }, output: textOutput,
     async execute(args, exec) {
       await rootOnly(exec);
       if (++submissions > 3) throw new Error('修复提交已达三次上限，请停止并报告问题。');
+      if (!reviewRead) throw new Error('提交前请先调用 gzh_design_reference(topic="review")，按审稿清单检查本稿；无需重复读取其他已读参考。');
       const checked = validateArticle(args.html, { assets: job.assets, source: job.text });
       if (checked.errors.length) {
         await log(`HTML 检查需修复：${checked.errors.join('；')}`);
@@ -182,18 +199,11 @@ export async function apply(ctx, config = {}) {
       }
       if (!args.title.trim() || args.title.length > 120) throw new Error('标题不能为空，且须少于 120 字。');
       await importLegacyArticle(directory);
-      let previewBody = checked.html;
-      for (const asset of job.assets) {
-        if (previewBody.includes(`src="assets/${asset.file}"`)) {
-          const bytes = await readFile(path.join(directory, 'assets', asset.file));
-          previewBody = previewBody.replaceAll(`src="assets/${asset.file}"`, `src="data:image/png;base64,${bytes.toString('base64')}"`);
-        }
-      }
-      const saved = await commitArticle(directory, { html: checked.html, preview: documentHtml(previewBody, args.title, { preview: true }), submission: { title: args.title, notes: args.notes, warnings: checked.warnings }, job }, exec.signal);
+      const saved = await commitArticle(directory, { html: checked.html, preview: documentHtml(checked.html, args.title, { preview: true }), submission: { title: args.title, notes: args.notes, warnings: checked.warnings }, job }, exec.signal);
       await log('正文 HTML 已通过检查并保存');
       config.onSubmitted?.();
       if (!config.keepBuiltins) exec.concludeTurn();
-      return { result: JSON.stringify({ status: 'validated', article: saved.article, preview: saved.preview, version: saved.version, warnings: checked.warnings, next: config.keepBuiltins ? '现在用内置 present 交付返回的固定版本 article 和 preview 路径，不要改用任务根目录的文件；结束本轮设计；用户提出修改后再继续。' : '结束本轮设计。' }) };
+      return { result: JSON.stringify({ status: 'validated', article: saved.article, preview: saved.preview, version: saved.version, warnings: checked.warnings, next: config.keepBuiltins ? '按主技能 review 在可用工具与预算内检查返回的最终 preview：新设计最多一次手机宽度整页检查和一轮合并修复；无明显问题立即用 present 交付固定版本 article 和 preview。不要交付会变化的根目录别名。没有截图能力则说明未做视觉验证，不改源码或安装工具。' : 'HTML 已保存，结束本轮设计；此入口没有截图能力，不宣称完成视觉验证。' }) };
     },
   }));
   await writeFile(path.join(directory, 'plugin-ready'), 'gzh-agent-tools');

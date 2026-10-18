@@ -29,9 +29,15 @@ test('real Harness delegates vision and image planning, then validates an HTML d
       let content, call;
       if (names.includes('submit_article')) {
         const results = input.messages.filter(m => m.role === 'tool');
-        if (results.length === 0) { seen.push('main-vision'); call = { name: 'inspect_images', arguments: { focus: '识别画面和文字。' } }; }
-        else if (results.length === 1) { seen.push('main-image'); call = { name: 'generate_image', arguments: { brief: '城市散步的绿色简洁插图', alt: '散步插图' } }; }
-        else if (results.length === 2) {
+        const references = ['index', 'editorial', 'components', 'images', 'review'];
+        if (results.length < references.length) {
+          const topic = references[results.length];
+          seen.push('reference-' + topic);
+          call = { name: 'gzh_design_reference', arguments: { topic } };
+        }
+        else if (results.length === 5) { seen.push('main-vision'); call = { name: 'inspect_images', arguments: { focus: '识别画面和文字。' } }; }
+        else if (results.length === 6) { seen.push('main-image'); call = { name: 'generate_image', arguments: { brief: '城市散步的绿色简洁插图', alt: '散步插图' } }; }
+        else if (results.length === 7) {
           seen.push('main-update');
           call = { name: 'update_article_assets', arguments: { updates: [{ asset_id: asset.id, image_path: path.join(directory, 'assets', asset.file) }] } };
         } else {
@@ -55,7 +61,11 @@ test('real Harness delegates vision and image planning, then validates an HTML d
   try {
     const result = await runHarness(directory, config, AbortSignal.timeout(45000));
     assert.equal(result.title, '城市散步计划');
-    assert.deepEqual(seen, ['main-vision', 'vision-child', 'main-image', 'image-child', 'image-api', 'main-update', 'main-submit']);
+    const patch = JSON.parse(await readFile(path.join(directory, 'harness.patch.yml'), 'utf8'));
+    assert.equal(patch.find(row => row.id === 'sandbox-policy').config.mode, 'danger-full-access');
+    assert.equal(patch.find(row => row.id === 'approval').config.policy, 'never');
+    assert.match(await readFile(path.join(directory, 'article.html'), 'utf8'), /data:image\/png;base64,/);
+    assert.deepEqual(seen, ['reference-index', 'reference-editorial', 'reference-components', 'reference-images', 'reference-review', 'main-vision', 'vision-child', 'main-image', 'image-child', 'image-api', 'main-update', 'main-submit']);
     const savedAssets = (await readJson(path.join(directory, 'job.json'))).assets;
     assert.equal(savedAssets.length, 2);
     assert.equal(savedAssets[0].id, asset.id);
