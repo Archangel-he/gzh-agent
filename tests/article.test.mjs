@@ -41,5 +41,6 @@ test('uploads decode and normalize real pixels rather than trusting the filename
     assert.match(asset.file, /^[a-f0-9-]+\.png$/);
     assert.ok((await readFile(path.join(directory, 'assets', asset.file))).length);
     await assert.rejects(saveImage(directory, { dataUrl: 'data:image/png;base64,' + Buffer.from('not a picture').toString('base64') }));
+    await assert.rejects(saveImage(directory, { dataUrl: 'data:image/png;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>').toString('base64') }), /实际的/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

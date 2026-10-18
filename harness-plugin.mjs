@@ -106,9 +106,10 @@ export async function apply(ctx, config = {}) {
   ctx.tools.register(defineTool({
     name: 'update_article_assets', description: '为当前文章追加或替换图片。替换保留 asset://ID，不改正文；旧图片和已提交版本保留，随后调用 submit_article 生成新版本。',
     parameters: {
-      updates: { type: 'array', required: true, description: '最多六项。asset_id 留空追加；填写已有 ID 则替换。image_path 必须在工作区内。', items: { type: 'object', properties: {
+      updates: { type: 'array', required: true, description: '最多六项。asset_id 留空追加；填写已有 ID 则替换。image_path 为工作区路径；本轮聊天图片可用 image_index（从1开始），两者选一。', items: { type: 'object', properties: {
         asset_id: { type: 'string', description: '待替换的已有素材 ID；追加时省略。' },
-        image_path: { type: 'string', required: true, description: '工作区内的 PNG、JPG 或 WebP 路径。' },
+        image_path: { type: 'string', description: '工作区内的 PNG、JPG 或 WebP 路径，与 image_index 二选一。' },
+        image_index: { type: 'number', description: '本轮聊天图片序号，从1开始，最多6；与 image_path 二选一。' },
         name: { type: 'string' }, role: { type: 'string', enum: ['article', 'reference', 'document'] },
       }, additionalProperties: false } },
     }, output: textOutput,
@@ -117,7 +118,8 @@ export async function apply(ctx, config = {}) {
       if (!Array.isArray(args.updates) || !args.updates.length || args.updates.length > 6) throw new Error('每次更新一至六张图片。');
       const ids = new Set();
       for (const item of args.updates) {
-        if (!item.image_path || item.asset_id && (!job.assets.some(a => a.id === item.asset_id) || ids.has(item.asset_id))) throw new Error('图片路径不能为空，替换 ID 必须存在且不能重复。');
+        if (item.image_path ? item.image_index !== undefined : !Number.isInteger(item.image_index) || item.image_index < 1 || item.image_index > 6) throw new Error('请提供工作区图片路径或本轮聊天图片序号，二选一。');
+        if (item.asset_id && (!job.assets.some(a => a.id === item.asset_id) || ids.has(item.asset_id))) throw new Error('替换 ID 必须存在且不能重复。');
         if (item.asset_id) ids.add(item.asset_id);
       }
       if (job.assets.length + args.updates.filter(x => !x.asset_id).length > 6) throw new Error('每篇最多六张素材，请替换已有图片。');
@@ -128,7 +130,14 @@ export async function apply(ctx, config = {}) {
           exec.signal.throwIfAborted();
           const index = nextAssets.findIndex(a => a.id === item.asset_id);
           const previous = nextAssets[index];
-          const asset = await saveWorkspaceImage(directory, workspace, item.image_path, { name: item.name ?? previous?.name, role: item.role ?? previous?.role });
+          let asset;
+          const options = { name: item.name ?? previous?.name, role: item.role ?? previous?.role };
+          if (item.image_path) asset = await saveWorkspaceImage(directory, workspace, item.image_path, options);
+          else {
+            if (!config.readChatImage) throw new Error('此运行入口不支持聊天附件，请提供工作区图片路径。');
+            const image = await config.readChatImage(item.image_index, exec.signal);
+            asset = await saveImage(directory, { ...image, ...options, name: options.name ?? image.name });
+          }
           staged.push(asset.file);
           if (previous) nextAssets[index] = { ...asset, id: previous.id };
           else nextAssets.push(asset);

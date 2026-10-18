@@ -103,6 +103,13 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     assert.equal(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), oldArticle);
     assert.equal(await readFile(path.join(prepared.directory, 'preview.html'), 'utf8'), oldPreview);
     assert.ok((await readFile(path.join(prepared.directory, 'assets', oldJob.assets[0].file))).length);
+    await emit('session/event', agent.session, { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'image', attachment: { name: 'replacement.png', mediaType: 'image/png' } }] } });
+    const chatUpdate = JSON.parse((await update.execute({ updates: [{ asset_id: asset.id, image_index: 1 }] }, exec)).result);
+    assert.equal(chatUpdate.assets[0].id, asset.id); assert.equal(chatUpdate.assets[0].width, 40);
+    // Runtime snapshots must not overwrite the human's attachment references.
+    await emit('session/event', agent.session, { type: 'user/message', data: { source: { kind: 'runtime-context' }, content: [] } });
+    await assert.rejects(update.execute({ updates: [{ asset_id: asset.id, image_index: 2 }] }, exec), /编号/);
+    await assert.rejects(update.execute({ updates: [{ asset_id: asset.id, image_index: 1, image_path: replacement }] }, exec), /二选一/);
     const jobAfter = await readFile(path.join(prepared.directory, 'job.json'), 'utf8');
     const filesAfter = await readdir(path.join(prepared.directory, 'assets'));
     await assert.rejects(update.execute({ updates: [{ asset_id: asset.id, image_path: replacement }, { image_path: 'missing.png' }] }, exec));
@@ -116,7 +123,7 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     const appended = JSON.parse((await update.execute({ updates: [{ image_path: replacement, name: '新增' }] }, exec)).result);
     assert.equal(appended.assets.length, 2);
     await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p>${appended.assets.map(a => `<img src="asset://${a.id}" alt="测试图"/>`).join('')}</section>`, notes: '素材更新' }, exec);
-    assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), new RegExp(changed.assets[0].file));
+    assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), new RegExp(chatUpdate.assets[0].file));
     assert.equal((await readdir(path.join(prepared.directory, 'versions'))).length, 4);
     const again = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: '不能覆盖', instruction: '' }, exec)).result);
     assert.equal(again.directory, prepared.directory); assert.equal(again.assets.length, 2);
@@ -128,6 +135,10 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
       { type: 'tool/result', data: { message: { toolCallId: 'prepare', content: [{ type: 'text', text: JSON.stringify(prepared) }] } } },
     ];
     await apply(ctx); await emit('agent/created', { agent });
+    await emit('session/event', agent.session, { type: 'turn/start', data: { turn: 6 } });
+    const gate = handlers.get('tools/pre-execute')[0];
+    for (let n = 0; n < 2; n++) assert.equal(await gate({ name: 'web_search', agent }, () => 'allowed'), 'allowed');
+    assert.equal((await gate({ name: 'web_search', agent }, () => 'allowed')).kind, 'deny');
     const restored = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: '不覆盖', instruction: '' }, exec)).result);
     assert.equal(restored.directory, prepared.directory); assert.equal(restored.assets.length, 2);
     assert.ok(tools.has('update_article_assets'));
