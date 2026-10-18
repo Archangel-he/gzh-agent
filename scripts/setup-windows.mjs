@@ -55,8 +55,8 @@ export async function setupWindows() {
   }
   const sourceRequire = createRequire(path.join(source, 'package.json'));
   const { tsImport } = await import(pathToFileURL(sourceRequire.resolve('tsx/esm/api')));
-  const { prepareDevelopmentProject } = await tsImport(path.join(source, 'apps/desktop/scripts/development-project.ts'), { parentURL: import.meta.url });
-  const { DESKTOP_HOST_PROTOCOL_VERSION } = await tsImport(path.join(source, 'apps/desktop/src/host-protocol.ts'), { parentURL: import.meta.url });
+  const { prepareDevelopmentProject } = await tsImport(pathToFileURL(path.join(source, 'apps/desktop/scripts/development-project.ts')).href, { parentURL: import.meta.url });
+  const { DESKTOP_HOST_PROTOCOL_VERSION } = await tsImport(pathToFileURL(path.join(source, 'apps/desktop/src/host-protocol.ts')).href, { parentURL: import.meta.url });
   const manifest = JSON.parse(await readFile(path.join(source, 'package.json'), 'utf8'));
   const versions = JSON.parse(await readFile(path.join(source, '.desktop-build/targets/win-x64/runtime/versions.json'), 'utf8'));
   prepareDevelopmentProject({ projectDir: path.join(root, 'data/source-runtime'), cliDir: path.join(source, 'apps/cli'),
