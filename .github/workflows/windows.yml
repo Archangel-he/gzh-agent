@@ -38,7 +38,10 @@ jobs:
               if ($window) { $ready = $true; break }
             }
             if (-not $ready) { throw 'Bloop did not open its native window within 60 seconds.' }
-          } finally { taskkill /PID $launcher.Id /T /F 2>$null }
+          } finally {
+            if (Test-Path data/desktop.log) { Get-Content data/desktop.log -Tail 100 | ForEach-Object { $_ -replace 'token=[^ &]+','token=[redacted]' } }
+            taskkill /PID $launcher.Id /T /F 2>$null
+          }
       - name: Archive Windows source launcher
         shell: pwsh
         run: git archive --format=zip --output=Bloop-Windows-x64-source.zip HEAD
@@ -51,5 +54,7 @@ jobs:
         if: failure()
         with:
           name: Windows-diagnostics
-          path: data/harness-source/.desktop-build/packaging-runs/
+          path: |
+            data/desktop.log
+            data/harness-source/apps/desktop/.desktop-build/packaging-runs/
           if-no-files-found: ignore

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, open, access } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { route } from '../lib/model-route.mjs';
 
@@ -32,12 +32,13 @@ export async function prepareDesktop(root = appRoot) {
 export async function startDesktop() {
   const windows = process.platform === 'win32';
   const source = windows ? path.join(appRoot, 'data', 'harness-source') : path.resolve(appRoot, '..', 'deepseek-harness');
-  const binary = windows ? path.join(source, '.desktop-build/targets/win-x64/electron/electron.exe') : path.join(desktopApp, 'Contents', 'MacOS', 'Electron');
+  const sourceApp = path.join(source, 'apps/desktop');
+  const buildPaths = windows ? (await import(pathToFileURL(path.join(sourceApp, 'scripts/desktop-build-paths.mjs')))).desktopTargetBuildPaths('win-x64') : undefined;
+  const binary = windows ? path.join(buildPaths.electron, 'electron.exe') : path.join(desktopApp, 'Contents', 'MacOS', 'Electron');
   await access(binary);
   const { home, data, config, vision } = await prepareDesktop();
   const log = await open(path.join(data, 'desktop.log'), 'a', 0o600);
-  const sourceApp = path.join(source, 'apps/desktop');
-  const vendorRuntime = windows ? path.join(source, '.desktop-build/targets/win-x64/runtime') : path.resolve(appRoot, '..', 'DeepSeek Harness.app/Contents/Resources/runtime');
+  const vendorRuntime = windows ? buildPaths.runtime : path.resolve(appRoot, '..', 'DeepSeek Harness.app/Contents/Resources/runtime');
   const child = spawn(binary, [`--user-data-dir=${path.join(data, 'desktop-user-data')}`, '--force-renderer-accessibility', sourceApp], {
     cwd: appRoot, stdio: ['ignore', log.fd, log.fd],
     env: { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', GZH_DATA_DIR: data,

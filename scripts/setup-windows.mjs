@@ -58,7 +58,8 @@ export async function setupWindows() {
   const { prepareDevelopmentProject } = await tsImport(pathToFileURL(path.join(source, 'apps/desktop/scripts/development-project.ts')).href, { parentURL: import.meta.url });
   const { DESKTOP_HOST_PROTOCOL_VERSION } = await tsImport(pathToFileURL(path.join(source, 'apps/desktop/src/host-protocol.ts')).href, { parentURL: import.meta.url });
   const manifest = JSON.parse(await readFile(path.join(source, 'package.json'), 'utf8'));
-  const versions = JSON.parse(await readFile(path.join(source, '.desktop-build/targets/win-x64/runtime/versions.json'), 'utf8'));
+  const { desktopTargetBuildPaths } = await import(pathToFileURL(path.join(source, 'apps/desktop/scripts/desktop-build-paths.mjs')));
+  const versions = JSON.parse(await readFile(path.join(desktopTargetBuildPaths('win-x64').runtime, 'versions.json'), 'utf8'));
   prepareDevelopmentProject({ projectDir: path.join(root, 'data/source-runtime'), cliDir: path.join(source, 'apps/cli'),
     hostDir: path.join(source, 'apps/desktop-host'), dependencyDir: path.join(source, 'node_modules/.pnpm/node_modules'),
     release: { schemaVersion: 1, version: manifest.version, hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION, nodeVersion: versions.node, pnpmVersion: versions.pnpm }, target: 'win-x64' });
