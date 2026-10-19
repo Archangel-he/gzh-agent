@@ -8,6 +8,7 @@ import { brandMacBundle } from '../lib/macos-bundle.mjs';
 import { workspaceTemplate } from '../lib/release-layout.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+execFileSync('git', ['diff', '--quiet', 'HEAD', '--'], { cwd: root });
 const mac = process.platform === 'darwin';
 if ((!mac && process.platform !== 'win32') || (mac ? process.arch !== 'arm64' : process.arch !== 'x64')) throw new Error('Release targets: macOS arm64 and Windows x64.');
 const source = mac ? path.resolve(root, '../deepseek-harness') : path.join(root, 'data/harness-source');
@@ -52,7 +53,7 @@ if (mac) {
       filter: file => !['node_modules', '.git', 'src', 'tests'].includes(path.basename(file)) && !/\.(?:map|tsbuildinfo)$/.test(file) });
   }
   await cp(path.join(source, 'apps/web/dist'), path.join(runtime, 'node_modules/@deepseek-ai/dsh-web-frontend/dist'), { recursive: true });
-  await cp(path.join(vendor, 'Contents/Resources/runtime/primary-runtime'), path.join(runtime, 'primary-runtime'), { recursive: true, verbatimSymlinks: true });
+  await cp(path.join(vendor, 'Contents/Resources/runtime'), runtime, { recursive: true, verbatimSymlinks: true });
   await rm(path.join(app, 'Contents/Resources/app.asar'));
   await rm(path.join(app, 'Contents/Resources/app.asar.unpacked'), { recursive: true, force: true });
   await rm(path.join(app, 'Contents/Resources/runtime'), { recursive: true, force: true });
@@ -64,7 +65,7 @@ if (mac) {
 } else {
   await cp(target.electron, bundle, { recursive: true });
   await cp(target.dsh, runtime, { recursive: true });
-  await cp(path.join(target.runtime, 'primary-runtime'), path.join(runtime, 'primary-runtime'), { recursive: true });
+  await cp(target.runtime, runtime, { recursive: true });
   const manifest = JSON.parse(await readFile(path.join(source, 'apps/desktop/package.json'), 'utf8'));
   const dependencies = Object.fromEntries(Object.entries(manifest.dependencies).filter(([, v]) => !v.startsWith('workspace:')));
   await mkdir(path.join(runtime, 'desktop'), { recursive: true });
@@ -108,6 +109,7 @@ if (mac) {
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', app]);
   execFileSync('codesign', ['--verify', '--deep', '--strict', app]);
 }
+for (const file of ['office-skills/office/SKILL.md', 'primary-runtime/runtime.json', 'desktop/lib/main.js', 'desktop/lib/preload-app.cjs']) await readFile(path.join(runtime, file));
 const filename = `Bloop-v${version}-${mac ? 'macOS-arm64' : 'Windows-x64'}-portable.zip`;
 const zip = path.join(destination, filename);
 await rm(zip, { force: true });

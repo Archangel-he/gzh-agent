@@ -55,7 +55,7 @@ jobs:
           $exe = Join-Path $smoke 'Bloop/electron.exe'
           $stdout = Join-Path $env:RUNNER_TEMP 'bloop-portable-stdout.log'
           $stderr = Join-Path $env:RUNNER_TEMP 'bloop-portable-stderr.log'
-          $launcher = Start-Process $exe -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          $launcher = Start-Process $exe -ArgumentList '--remote-debugging-port=9222' -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
           try {
             $ready = $false
             for ($attempt = 0; $attempt -lt 90; $attempt++) {
@@ -65,6 +65,8 @@ jobs:
               if ($window.MainWindowTitle -eq 'Bloop') { $ready = $true; break }
             }
             if (-not $ready) { throw 'Portable Bloop did not open its native window.' }
+            node scripts/smoke-portable.mjs 9222
+            if ($LASTEXITCODE -ne 0) { throw 'Portable chat input failed to become ready.' }
           } finally {
             if (Test-Path $stderr) { Get-Content $stderr -Tail 80 | ForEach-Object { $_ -replace 'token=[^ &]+','token=[redacted]' } }
             taskkill /PID $launcher.Id /T /F 2>$null
