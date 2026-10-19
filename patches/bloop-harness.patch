@@ -2638,7 +2638,6 @@ index 00000000..3861c9e8
 +}
 diff --git a/packages/client/ui-primitives/src/BloopModelSettings.tsx b/packages/client/ui-primitives/src/BloopModelSettings.tsx
 new file mode 100644
-index 00000000..04070e08
 --- /dev/null
 +++ b/packages/client/ui-primitives/src/BloopModelSettings.tsx
 @@ -0,0 +1,67 @@
@@ -2676,7 +2675,7 @@ index 00000000..04070e08
 +      const reply = await client.request('save-settings', {[purpose]: draft[purpose]})
 +      if (reply.settings) setConfig(reply.settings)
 +      setDraft(previous => ({...previous, [purpose]: {...previous[purpose], apiKey: '', clearKey: false}}))
-+      setNotice(labels['bloop.restart'])
++      setNotice(labels[reply.capabilities?.restartRequired ? 'bloop.restart' : 'bloop.saved'])
 +    } catch { setNotice(labels['bloop.failed']) }
 +    finally { setPending(false) }
 +  }
@@ -2831,10 +2830,9 @@ index 18f95444..460b3786 100644
 +export { BloopModelSettings } from './BloopModelSettings.tsx'
 diff --git a/packages/client/ui-primitives/tests/bloop.client.spec.tsx b/packages/client/ui-primitives/tests/bloop.client.spec.tsx
 new file mode 100644
-index 00000000..d31590e1
 --- /dev/null
 +++ b/packages/client/ui-primitives/tests/bloop.client.spec.tsx
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,53 @@
 +// @vitest-environment jsdom
 +/** Delivery actions retain selected immutable paths and reject malformed native payloads. */
 +import { afterEach, expect, it, vi } from 'vitest'
@@ -2864,7 +2862,7 @@ index 00000000..d31590e1
 +})
 +it('keeps API key inputs empty after loading and saving', async () => {
 +  const settings = {main: {baseUrl: 'https://example.test/v1', model: 'design', hasKey: true}, vision: {baseUrl: 'https://example.test/v1', model: 'vision', hasKey: true}, image: {baseUrl: '', model: '', hasKey: false}}
-+  const request = vi.fn(async () => ({settings}))
++  const request = vi.fn(async (operation: string, args?: {image?: object}) => ({settings, capabilities: {visionConfigured: true, imageConfigured: false, restartRequired: operation === 'save-settings' && !args?.image}}))
 +  render(<BloopModelSettings client={{request}} labels={labels} />)
 +  await waitFor(() => expect((screen.getByRole('button', {name: 'bloop.saveSettings'}) as HTMLButtonElement).disabled).toBe(false))
 +  const keys = screen.getAllByLabelText('bloop.apiKey')
@@ -2876,6 +2874,9 @@ index 00000000..d31590e1
 +  expect(request).toHaveBeenLastCalledWith('save-settings', {main: expect.objectContaining({model: 'design', apiKey: 'fixture-secret'})})
 +  fireEvent.click(screen.getByRole('tab', {name: 'bloop.imageService'}))
 +  expect((screen.getByLabelText('bloop.model') as HTMLInputElement).value).toBe('')
++  fireEvent.click(screen.getByRole('button', {name: 'bloop.saveSettings'}))
++  await screen.findByText('bloop.saved')
++  expect(request).toHaveBeenLastCalledWith('save-settings', {image: expect.objectContaining({apiKey: ''})})
 +  fireEvent.click(screen.getByRole('tab', {name: 'bloop.vision'}))
 +  expect((screen.getByLabelText('bloop.model') as HTMLInputElement).value).toBe('vision')
 +})

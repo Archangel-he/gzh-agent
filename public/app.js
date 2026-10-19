@@ -33,6 +33,7 @@ function reset() {
 async function loadSettings() {
   const result = await api('/api/settings'); config = result.config;
   $('#configDot').classList.toggle('ready', config.main.hasKey);
+  $('#imageApiDot').classList.toggle('ready', config.image.hasKey && config.image.baseUrl && config.image.model);
   $('#imageHint').textContent = config.image.hasKey && config.image.baseUrl && config.image.model ? '生图服务已配置 · 按需调用' : '需要单独配置生图服务';
 }
 function showSettings() {
@@ -61,6 +62,27 @@ $('#settingsForm').addEventListener('submit', async event => {
 });
 $('#settingsBtn').onclick = showSettings;
 $('#closeSettings').onclick = () => $('#settingsDialog').close();
+function showImageApi() {
+  const card = $('#imageApiDialog .provider-card');
+  card.querySelector('[name=baseUrl]').value = config.image.baseUrl || '';
+  card.querySelector('[name=model]').value = config.image.model || '';
+  card.querySelector('[name=apiKey]').value = '';
+  card.querySelector('[name=apiKey]').placeholder = config.image.hasKey ? '已保存，留空保留现有密钥' : '填写密钥';
+  const clear = card.querySelector('[name=clearKey]'); clear.checked = false;
+  $('#imageApiClearWrap').hidden = !config.image.hasKey;
+  $('#imageApiDialog').showModal();
+}
+$('#imageApiBtn').onclick = showImageApi;
+$('#closeImageApi').onclick = () => $('#imageApiDialog').close();
+$('#imageApiForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.submitter; button.disabled = true;
+  try {
+    const card = $('#imageApiDialog .provider-card');
+    await post('/api/settings', { image: { baseUrl: card.querySelector('[name=baseUrl]').value, model: card.querySelector('[name=model]').value, apiKey: card.querySelector('[name=apiKey]').value, clearKey: Boolean(card.querySelector('[name=clearKey]').checked) } });
+    await loadSettings(); $('#imageApiDialog').close(); toast('生图配置已保存在本机。');
+  } catch (error) { toast(error.message); } finally { button.disabled = false; }
+});
 $('#newProject').onclick = reset;
 $('#source').addEventListener('input', count);
 $('#clearRevision').onclick = () => setRevision(null);

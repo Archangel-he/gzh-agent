@@ -10,7 +10,7 @@
 
 macOS 应用直接从已签名的 Electron 主程序启动，主应用和辅助进程使用 Bloop 名称与独立标识；权限用途说明也使用 Bloop。继续使用原有 data 目录、历史与模型配置。系统可能为修正后的身份重新申请授权，旧 dsh 授权记录不会被自动清除。
 
-打开后直接输入正文和设计要求，无需选择文件夹、启用公众号插件或指定技能名称。启动器默认关闭开发者工具的自动弹出。可以通过内置附件入口上传图片，也可指定项目目录内的 PNG、JPG、WebP 文件。当前每篇上限六张、单张 5 MB、正文 16000 字。一篇文章使用一个会话。首版应用重启后会打开新对话，旧对话仍保留在历史中；打开历史对话后，调用 gzh_prepare_article 会从持久工具记录恢复已有任务；也可指定 existing_directory。追加／替换图片使用 update_article_assets（工作区 image_path 或本轮聊天附件 image_index 二选一），保留原素材 ID、旧图片与成功稿，不需重新初始化。
+打开后直接输入正文和设计要求，无需选择文件夹、启用公众号插件或指定技能名称。收到制作推文请求后，Agent 会先调用内置 ask_user_question 弹出七项问卷（标题字体与字号、正文字体与字号、推文首图、推文尾图、署名内容、整体风格、配图偏好），在用户回复之前不会开始排版或生成图片；回答会写入任务的 questionnaire 记录。启动器默认关闭开发者工具的自动弹出。可以通过内置附件入口上传图片，也可指定项目目录内的 PNG、JPG、WebP 文件。当前每篇上限六张、单张 5 MB、正文 16000 字。一篇文章使用一个会话。首版应用重启后会打开新对话，旧对话仍保留在历史中；打开历史对话后，调用 gzh_prepare_article 会从持久工具记录恢复已有任务；也可指定 existing_directory。追加／替换图片使用 update_article_assets（工作区 image_path 或本轮聊天附件 image_index 二选一），保留原素材 ID、旧图片与成功稿，不需重新初始化。
 
 示例请求：
 
@@ -31,21 +31,23 @@ macOS 应用直接从已签名的 Electron 主程序启动，主应用和辅助�
 
 ## 实际流程
 
-1. 主 Agent 已加载 `gzh-design` 全文，按用户需求调用 `gzh_prepare_article` 建立本会话任务。
-2. 需要确认图片内容时，`inspect_images` 启动真实 Harness 子 Agent，并将图片字节作为多模态输入，返回识别与风格分析。
-3. 主 Agent 根据原文和要求自主设计，以内联样式生成公众号正文。没有固定主题数量限制。
-4. 用户允许生图且已配置图像服务时，`generate_image` 委派插图策划子 Agent，再请求实际图片生成 API，保存图片文件。
-5. `submit_article` 检查正文覆盖、图片引用和主动内容，通过后保存文件。失败不会覆盖上次成功的正文；同一会话继续修改时会保存独立成功版本。
-6. 内置 `present` 交付 submit_article 返回的固定版本正文与预览路径。
+1. 用户发出制作推文请求后，主 Agent 必须先调用内置 `ask_user_question` 弹出七项问卷：标题字体与字号、正文字体与字号、推文首图、推文尾图、署名内容、整体风格、配图偏好。用户回复前不排版、不下素材、不生图。
+2. 主 Agent 已加载 `gzh-design` 全文，把问卷回答填入 `questionnaire` 参数调用 `gzh_prepare_article` 建立本会话任务；缺少问卷回答会被拒绝执行。
+3. 需要确认图片内容时，`inspect_images` 启动真实 Harness 子 Agent，并将图片字节作为多模态输入，返回识别与风格分析。
+4. 主 Agent 根据原文、问卷和要求自主设计，以内联样式生成公众号正文：标题与正文的字体族、字号分别按问卷回答，首图、尾图与署名按问卷插入正文首尾；正文各段落之间保留适当垂直间距（每个 `<p>` 带 `margin` 下边距，标题与段落间同样留白）；用户允许生图且已配置图像服务时，`generate_image` 委派插图策划子 Agent 请求实际生图接口，生成的配图必须插入正文对应段落。没有固定主题数量限制。
+5. `generate_cover` 生成或合成「大字海报」封面，突出推文核心主题，输出 2.35:1 横版、1:1 方形和两者拼接图，独立保存在 assets/ 目录，不插入正文；生图服务未配置时可用已有素材合成。
+6. `submit_article` 检查正文覆盖、图片引用和主动内容，通过后保存文件。失败不会覆盖上次成功的正文；同一会话继续修改时会保存独立成功版本。
+7. 内置 `present` 交付 submit_article 返回的固定版本正文与预览路径，并单独提供封面文件路径供用户下载。
 
 输出保存在工作区 `gzh-output/<任务ID>/`：
 
 - `article.html`：图片内嵌、可独立打开的完整 HTML，正文样式内联。
 - `preview.html`：图片内嵌的独立预览与富文本复制入口，在原生侧栏也能显示配图。
 - `assets/`：用于继续编辑和版本恢复的实际 PNG 素材；交付 HTML 显示不依赖此目录。
-- `job.json`、`vision.txt`、`submission.json`：原文、识别结果和设计说明。
+- `job.json`、`vision.txt`、`submission.json`：原文、问卷回答、识别结果和设计说明。
 - `revisions/`、`current.json`：完整固定版本及当前稿指针。
 - `versions/`：升级前的旧稿备份，保留为只读预览。
+- `assets/cover-*.png`：独立的横版、方形封面和拼接图。
 
 复制到公众号后仍须检查图片：本地图片路径不会自动变成微信素材地址，本版不含登录、素材上传或自动发布。请在公众号后台上传配图，并做手机预览。
 
@@ -74,7 +76,21 @@ macOS 应用直接从已签名的 Electron 主程序启动，主应用和辅助�
 - `vision`：留空继承主模型，可另外指定支持视觉输入的兼容接口。
 - `image`：独立生图服务的 `baseUrl`、`model`、`apiKey`。DeepSeek 主模型 API Key 不等于已配置生图服务。
 
-生图端目前支持 OpenAI 兼容的 `POST <baseUrl>/images/generations`、1024×1024、`data[0].b64_json` 响应。仅返回 URL 的服务尚未接入。没有配置时会返回明确错误，不能以占位图冒充生成成功。
+生图端支持 OpenAI 兼容的 `POST <baseUrl>/images/generations`、1024×1024，响应可为 `data[0].b64_json`（如 DeepInfra）或 `data[0].url`（如火山方舟 Seedream 返回 jpg 链接）。URL 型响应经受控下载器获取：仅公共 HTTP(S)、DNS 固定、禁私网保留段、5 MB 上限、60 秒超时。可用 `npm run check:image` 做一次真实连通性与生图测试（不回显密钥）。没有配置时会返回明确错误，不能以占位图冒充生成成功。
+
+### 生图密钥自带（BYOK，各付各的）
+
+生图按调用计费，费用计入**密钥所属账号**。仓库不捆绑任何密钥：`data/` 整体被 Git 忽略，构建包也只带空的 `settings.example.json`，所以别人拿到软件时生图默认为未配置，不会扣到你的账号。
+
+每台机器运行一次 `npm run setup:image`，按提示填入**自己的**生图服务地址、模型与密钥即可：
+
+- 密钥写入本机凭据库 `data/desktop-home/.credentials.yaml`（引用名 `GZH_IMAGE_KEY`，权限 0600，仅本机当前系统用户可读，桌面版热加载、无需重启），绝不回显、不进 Git、不进对话记录。
+- 地址与模型同时写入本机凭据库与 `data/settings.json` 的 `image` 段；凭据库优先。
+- 解析优先级：本机凭据库的 `GZH_IMAGE_BASEURL`、`GZH_IMAGE_MODEL`、`GZH_IMAGE_KEY` **高于** `data/settings.json` 的 `image` 段；后者仅作本机凭据未设置时的兜底。`npm run setup:image -- --clear` 可移除本机存储的密钥。
+
+桌面版在「设置 → 模型 → 生图模型」页签填写。服务地址、模型与密钥写入本机凭据库（`GZH_IMAGE_BASEURL`、`GZH_IMAGE_MODEL`、`GZH_IMAGE_KEY`），生图配置即时生效，无需重启；密钥不回显，留空保留，明确清除才删除。地址与模型可以查看和修改。设计/识图模型仍在各自页签配置，修改后重启应用。
+
+网页原型（`npm run start:web-prototype`）没有桌面凭据库，仍通过界面「模型设置」把密钥写入本机 `data/settings.json`，同样是各填各的、只存本地。
 
 桌面配置保存在 `data/desktop-home/profiles/desktop/cordis.patch.yml`，首次启动时初始化，之后保留用户在插件和模型页面中的修改。默认加载主模型路由、公众号插件、设计技能和原有内置功能插件。额外会话日志上传被关闭，会话启动采用完全访问且无需逐项审批的默认权限。需要独立凭据、额外依赖或更宽权限的实验插件不随界面简化自动启用。修改模型路由后以原生模型设置为准；编辑业务插件代码后退出应用并重新启动。
 
@@ -82,8 +98,8 @@ macOS 应用直接从已签名的 Electron 主程序启动，主应用和辅助�
 
 | 文件 | 职责 |
 | --- | --- |
-| `desktop-plugin.mjs` | 原生会话接入、文字与附件归档、会话内业务工具注册 |
-| `harness-plugin.mjs` | 视觉/插图子 Agent、真实生图请求、检查与保存 HTML |
+| `desktop-plugin.mjs` | 原生会话接入、文字与附件归档、会话内业务工具注册、问卷门禁（ask_user_question 后才可建任务） |
+| `harness-plugin.mjs` | 视觉/插图子 Agent、真实生图请求、封面大字海报生成与合成（generate_cover）、检查与保存 HTML |
 | `.agents/skills/gzh-design/SKILL.md` | 公众号设计流程、内容与图片使用约束 |
 | `lib/article.mjs` | HTML 清洗、原文覆盖与素材引用检查、预览外壳 |
 | `lib/article-budget.mjs` | 每轮搜索、工具、视觉检查预算与取消传播 |
@@ -139,7 +155,7 @@ Windows 入口是仓库根目录的 `启动Bloop.cmd`。这是首次运行会构
 
 脚本会安装业务依赖，拉取 `harness.json` 固定的源码版本，应用 `patches/bloop-harness.patch`，编译 Bloop 前端并准备 Windows Electron 与原生运行环境，再打开桌面窗口。后续同目录启动复用构建。目录移动时重新构建；构建失败保留日志，不会删除用户配置。已有旧补丁缓存不会被强行覆盖：升级源码包后若补丁检查不通过，先退出应用，将 data/harness-source 改名备份，再启动以重新准备；data/desktop-home 中的历史和 data/settings.json 不受影响。
 
-Windows 私有配置、模型凭据、历史和编译缓存均在 `data/`，不提交到 Git。首次启动可在设置 → 模型中配置自己的服务；额外识图和生图服务仍可在 `data/settings.json` 配置。不要将 Mac 的 `data/` 或 `node_modules/` 复制到 Windows。
+Windows 私有配置、模型凭据、历史和编译缓存均在 `data/`，不提交到 Git。首次启动可在设置 → 模型中配置自己的服务；生图服务建议运行 `npm run setup:image` 填入自己的密钥（存入本机凭据库，各付各的），额外识图服务仍可在 `data/settings.json` 配置。不要将 Mac 的 `data/` 或 `node_modules/` 复制到 Windows。
 
 GitHub Actions 的 `Bloop Windows` 工作流在 Windows x64 上执行业务测试、原生构建和桌面窗口启动检查，通过后上传 `Bloop-Windows-x64-source`。该 ZIP 是无密钥源码启动包，不是预编译安装包；下载后仍需上述首次准备。工作流通过只证明构建和开窗，不等于 Windows 上真实模型对话、图片生成或公众号复制的端到端验收。
 

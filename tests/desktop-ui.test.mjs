@@ -101,3 +101,25 @@ test('two legacy cards share one migration and saving the design model updates o
   assert.equal(patch.find(item => item.id === 'agent-default-model').config.model, 'design-new');
   assert.equal((await ui.request('settings')).settings.main.model, 'design-new');
 });
+
+test('image settings use the machine credential store, stay redacted and apply without restart', async t => {
+  const {root, ui} = await fixture(t);
+  const save = await ui.request('save-settings', {image: {baseUrl: 'https://images.example/v1', model: 'image-live', apiKey: 'fixture-image-secret'}});
+  assert.equal(save.capabilities.restartRequired, false);
+  assert.equal(save.settings.image.hasKey, true);
+  assert.doesNotMatch(JSON.stringify(save), /fixture-image-secret/);
+  assert.equal((await readJson(path.join(root, 'data/settings.json'))).image.apiKey, '');
+  const credentialsFile = path.join(root, 'data/desktop-home/.credentials.yaml');
+  const doc = await readJson(credentialsFile);
+  assert.equal(doc.refs.GZH_IMAGE_KEY, 'fixture-image-secret');
+  assert.equal(doc.refs.GZH_IMAGE_BASEURL, 'https://images.example/v1');
+  if (process.platform !== 'win32') assert.equal((await stat(credentialsFile)).mode & 0o777, 0o600);
+  await ui.request('save-settings', {image: {model: 'image-new', apiKey: ''}});
+  assert.equal((await ui.request('settings')).settings.image.model, 'image-new');
+  assert.equal((await ui.request('settings')).settings.image.hasKey, true);
+  await ui.request('save-settings', {main: {model: 'design-new'}});
+  assert.equal((await readJson(path.join(root, 'data/settings.json'))).image.apiKey, '');
+  const cleared = await ui.request('save-settings', {image: {clearKey: true}});
+  assert.equal(cleared.settings.image.hasKey, false);
+  assert.equal((await readJson(credentialsFile)).refs.GZH_IMAGE_KEY, undefined);
+});

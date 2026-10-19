@@ -39,6 +39,24 @@ test('image design survives validation while defaults and security checks remain
   assert.ok(!unsafe.html.includes('behavior:'));
   assert.ok(unsafe.html.includes('border-radius:12px'));
 });
+test('coverage tolerates layout splits and merges but still catches dropped text', () => {
+  const source = '第一段讲清楚背景与动机，这部分文字必须保留。第二段讨论方法细节，同样不能丢失。';
+  const assets = [{ id: 'a', file: 'a.png' }];
+  // A source paragraph split around an inserted figure + caption is still covered.
+  const split = '<section><p>第一段讲清楚背景与动机，这部分文字必须保留。</p><img src="asset://a" alt="图"><p>图：示意</p><p>第二段讨论方法细节，同样不能丢失。</p></section>';
+  assert.deepEqual(validateArticle(split, { source, assets }).errors, []);
+  // Both source paragraphs merged into one body paragraph is still covered.
+  assert.deepEqual(validateArticle(`<section><p>${source}</p></section>`, { source, assets }).errors, []);
+  // A caption interleaved INSIDE a source sentence is still covered (clause tier).
+  const interleaved = '<section><p>第一段讲清楚背景与动机，</p><p>图：示意</p><p>这部分文字必须保留。第二段讨论方法细节，同样不能丢失。</p></section>';
+  assert.deepEqual(validateArticle(interleaved, { source, assets }).errors, []);
+  // Dropping a clause still fails, and the error names the missing paragraph.
+  const dropped = '<section><p>第一段讲清楚背景与动机，</p><p>第二段讨论方法细节，同样不能丢失。</p></section>';
+  const bad = validateArticle(dropped, { source, assets });
+  assert.equal(bad.errors.length, 1);
+  assert.match(bad.errors[0], /未完整保留/);
+  assert.match(bad.errors[0], /这部分文字必须保留/);
+});
 test('settings redact secrets, preserve blank fields and reject credential-bearing URLs', () => {
   const first = updateSettings(defaultSettings, { main: { apiKey: 'test-secret' } });
   assert.equal(publicSettings(first).main.apiKey, '');
@@ -60,4 +78,10 @@ test('uploads decode and normalize real pixels rather than trusting the filename
     await assert.rejects(saveImage(directory, { dataUrl: 'data:image/png;base64,' + Buffer.from('not a picture').toString('base64') }));
     await assert.rejects(saveImage(directory, { dataUrl: 'data:image/png;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>').toString('base64') }), /实际的/);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('short clauses and dates cannot disappear during layout', () => {
+  const source = '今天，下雨，明天，放晴，后天，出发。';
+  assert.ok(validateArticle('<p>这是一段足够长的其他正文内容。</p>', { source }).errors.some(e => e.includes('未完整保留')));
+  assert.ok(validateArticle('<p>研究活动定于开展，欢迎同学报名。</p>', { source: '研究活动定于2026年10月19日开展，欢迎同学报名。' }).errors.some(e => e.includes('未完整保留')));
 });

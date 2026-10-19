@@ -30,7 +30,10 @@ test('desktop setup adds business capabilities without replacing builtin bundles
     assert.equal(JSON.parse(content).find(p => p.id === 'llm-pi-ai').config.providers['gzh-main'].models[0].input[1], 'image');
     await writeFile(filename, '# user plugin settings\n');
     await prepareDesktop(root);
-    assert.equal(await readFile(filename, 'utf8'), '# user plugin settings\n');
+    const repaired = await readFile(filename, 'utf8');
+    assert.ok(repaired.startsWith('# user plugin settings\n'));
+    assert.ok(repaired.includes('llm-pi-ai'));
+    assert.ok(!repaired.includes('fixture-secret'));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -73,15 +76,35 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     assert.ok(workflow.includes(await readFile(new URL('../.agents/skills/gzh-design/SKILL.md', import.meta.url), 'utf8')));
     await emit('session/event', agent.session, { type: 'user/message', data: { content: [{ type: 'image', attachment: { name: 'chat.png', mediaType: 'image/png' } }] } });
     const source = '这是一段需要完整保留、用于验证公众号设计交付的原始正文。';
-    const prepared = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。' }, exec)).result);
+    // The mandatory questionnaire gates task creation until ask_user_question was called and answered.
+    await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。' }, exec), /ask_user_question/);
+    agent.session.snapshotEvents = () => [
+      { type: 'assistant/message', data: { message: { content: [{ type: 'tool-call', name: 'ask_user_question', id: 'ask-pending' }] } } },
+      { type: 'tool/result', data: { message: { toolCallId: 'ask-pending', content: [{ type: 'text', text: '{"pending":true}' }] } } },
+    ];
+    await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。', questionnaire: {} }, exec), /ask_user_question/);
+    agent.session.snapshotEvents = () => [
+      { type: 'assistant/message', data: { message: { content: [{ type: 'tool-call', name: 'ask_user_question', id: 'ask-1' }] } } },
+      { type: 'tool/result', data: { message: { toolCallId: 'ask-1', content: [{ type: 'text', text: '{"answers":[{"id":"title_font","selected":["思源宋体 24px"]},{"id":"body_font","selected":["思源黑体 16px"]}]}' }] } } },
+    ];
+    await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。' }, exec), /questionnaire/);
+    const questionnaire = { title_font: '思源宋体 24px', body_font: '思源黑体 16px', head_image: '使用本轮上传的图片', tail_image: '无', signature: '作者：测试同学', style: '极简风', illustrations: '不需要 AI 配图' };
+    await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。', questionnaire: { ...questionnaire, signature: ' ' } }, exec), /署名/);
+    // Both font items are enforced: dropping the body font (or the title font) is refused.
+    await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。', questionnaire: { ...questionnaire, body_font: ' ' } }, exec), /正文字体与字号/);
+    await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。', questionnaire: { ...questionnaire, title_font: '' } }, exec), /标题字体与字号/);
+    const prepared = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。', questionnaire }, exec)).result);
     assert.equal(prepared.assets.length, 1);
-    assert.equal(tools.size, 10);
+    assert.equal(tools.size, 11);
     const reference = tools.get('gzh_design_reference');
     assert.match((await reference.execute({ topic: 'index' }, exec)).result, /文章配方/);
     await assert.rejects(tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p></section>`, notes: '未审稿' }, exec), /提交前请先调用/);
     await reference.execute({ topic: 'review' }, exec);
     await assert.rejects(reference.execute({ topic: '../settings.json' }, exec), /未知设计参考|must be one of/);
     await assert.rejects(reference.execute({ topic: 'index' }, { ...exec, agent: { session: { id: 'child' } } }), /主 Agent/);
+    assert.equal(prepared.questionnaire.body_font, '思源黑体 16px');
+    assert.equal(prepared.questionnaire.title_font, '思源宋体 24px');
+    assert.equal(JSON.parse(await readFile(path.join(prepared.directory, 'job.json'))).questionnaire.style, '极简风');
     assert.ok(tools.has('bash') && tools.has('present'));
     await tools.get('inspect_images').execute({ focus: '识别主体' }, exec);
     assert.equal(activation.delivery, 'caller');
@@ -131,7 +154,21 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     await assert.rejects(update.execute({ updates: [{ image_path: 'escape/bloop.svg' }] }, exec), /工作区/);
     const appended = JSON.parse((await update.execute({ updates: [{ image_path: replacement, name: '新增' }] }, exec)).result);
     assert.equal(appended.assets.length, 2);
-    await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p>${appended.assets.map(a => `<img src="asset://${a.id}" alt="测试图"/>`).join('')}</section>`, notes: '素材更新' }, exec);
+    // Cover poster composed from an existing asset: 2.35:1 banner, 1:1 square and the stacked combined sheet.
+    await assert.rejects(tools.get('generate_cover').execute({ title: '城市散步计划', brief: '科技风' }, exec), /尚未授权生图/);
+    const cover = JSON.parse((await tools.get('generate_cover').execute({ title: '城市散步计划', brief: '极简墨绿大字海报', source_asset_id: asset.id }, exec)).result);
+    const wideMeta = await sharp(cover.cover.wide).metadata();
+    assert.equal(wideMeta.width, 1024); assert.equal(wideMeta.height, 436);
+    const squareMeta = await sharp(cover.cover.square).metadata();
+    assert.equal(squareMeta.width, 1024); assert.equal(squareMeta.height, 1024);
+    const combinedMeta = await sharp(cover.cover.combined).metadata();
+    assert.equal(combinedMeta.width, 1024); assert.equal(combinedMeta.height, 1460);
+    assert.ok(cover.cover.combined.endsWith('-combined.png'));
+    assert.equal(JSON.parse(await readFile(path.join(prepared.directory, 'job.json'))).cover.mode, 'composed');
+    await assert.rejects(tools.get('generate_cover').execute({ title: ' ', brief: '科技风' }, exec), /主标题/);
+    const finalSubmission = JSON.parse((await tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p>${appended.assets.map(a => `<img src="asset://${a.id}" alt="测试图"/>`).join('')}</section>`, notes: '素材更新' }, exec)).result);
+    assert.ok(finalSubmission.cover.combined.endsWith('-combined.png'));
+    assert.match(finalSubmission.next, /封面/);
     assert.match(await readFile(path.join(prepared.directory, 'article.html'), 'utf8'), /src="data:image\/png;base64,/);
     assert.ok(!(await readFile(path.join(prepared.directory, 'article.html'), 'utf8')).includes('src="assets/'));
     assert.equal((await readdir(path.join(prepared.directory, 'revisions'))).length, 5);
@@ -156,4 +193,42 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     assert.equal(restored.directory, prepared.directory); assert.equal(restored.assets.length, 2);
     assert.ok(tools.has('update_article_assets'));
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('the desktop plugin exposes live image-service fields without ever holding the key', async () => {
+  const { Config, imageSettingsOverride, liveImageConfig } = await import('../desktop-plugin.mjs');
+  const { resolveImageConfig } = await import('../lib/image-config.mjs');
+  // The Settings page projects only volatile fields, so both must be live.
+  assert.equal(Config.dict.imageBaseUrl.meta.volatile, true);
+  assert.equal(Config.dict.imageModel.meta.volatile, true);
+  // A secret in Config would be persisted in the profile patch: the key stays in the credential store.
+  assert.equal(Config.dict.imageApiKey, undefined);
+  const parsed = Config({ imageBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', imageModel: 'seedream-flash' });
+  assert.equal(parsed.imageBaseUrl.get(), 'https://ark.cn-beijing.volces.com/api/v3');
+  // An empty Settings field falls back to data/settings.json; a filled one wins.
+  const fallback = { baseUrl: 'https://from-settings/v1', model: 'settings-model', apiKey: 'settings-key' };
+  assert.deepEqual(imageSettingsOverride(fallback, Config({})), fallback);
+  assert.equal(imageSettingsOverride(fallback, parsed).baseUrl, 'https://ark.cn-beijing.volces.com/api/v3');
+  assert.equal(imageSettingsOverride(fallback, undefined).model, 'settings-model');
+  // The endpoint is read per access, so a value saved mid-task reaches the next image.
+  const live = liveImageConfig(fallback, parsed);
+  assert.equal(live.model, 'seedream-flash');
+  parsed.imageModel = { get: () => 'seedream-pro' };
+  assert.equal(live.model, 'seedream-pro');
+  assert.equal(live.apiKey, 'settings-key');
+  // Only the key reference is stored here, so baseUrl/model fall through to `live`.
+  const keyOnly = { resolve: async (ref) => (ref === 'GZH_IMAGE_KEY' ? { value: 'own-key' } : undefined) };
+  const resolved = await resolveImageConfig(keyOnly, live);
+  assert.deepEqual({ baseUrl: resolved.baseUrl, model: resolved.model, source: resolved.source, configured: resolved.configured },
+    { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: 'seedream-pro', source: 'credential-store', configured: true });
+  assert.equal(resolved.apiKey, 'own-key');
+  // When the endpoint references are stored too, they outrank the settings block.
+  const full = { resolve: async (ref) => ({
+    GZH_IMAGE_BASEURL: { value: 'https://from-store/v1/' },
+    GZH_IMAGE_MODEL: { value: 'store-model' },
+    GZH_IMAGE_KEY: { value: 'own-key' },
+  }[ref]) };
+  const overridden = await resolveImageConfig(full, live);
+  assert.deepEqual({ baseUrl: overridden.baseUrl, model: overridden.model, source: overridden.source },
+    { baseUrl: 'https://from-store/v1', model: 'store-model', source: 'credential-store' });
 });
