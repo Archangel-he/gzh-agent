@@ -7,3 +7,7 @@ gzh-output/
 *.zip
 *.exe
 *.msi
+
+# Local article research photos; never ship in source or releases.
+/assets/zijingang/
+/release/

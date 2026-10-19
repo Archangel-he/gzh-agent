@@ -42,13 +42,39 @@ jobs:
             if (Test-Path data/desktop.log) { Get-Content data/desktop.log -Tail 100 | ForEach-Object { $_ -replace 'token=[^ &]+','token=[redacted]' } }
             taskkill /PID $launcher.Id /T /F 2>$null
           }
-      - name: Archive Windows source launcher
+      - name: Prepare portable runtime dependency closure
+        run: node scripts/prepare-release-runtime.mjs
+      - name: Package Windows portable release
+        run: node scripts/package-release.mjs
+      - name: Check relocated portable package without system Node or Git
         shell: pwsh
-        run: git archive --format=zip --output=Bloop-Windows-x64-source.zip HEAD
+        run: |
+          $zip = Get-ChildItem release/Bloop-v*-Windows-x64-portable.zip | Select-Object -First 1
+          $smoke = Join-Path $env:RUNNER_TEMP 'Bloop relocated smoke'
+          Expand-Archive $zip.FullName $smoke
+          $exe = Join-Path $smoke 'Bloop/electron.exe'
+          $stdout = Join-Path $env:RUNNER_TEMP 'bloop-portable-stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'bloop-portable-stderr.log'
+          $launcher = Start-Process $exe -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 90; $attempt++) {
+              Start-Sleep -Seconds 1
+              if ($launcher.HasExited) { throw 'Portable Bloop exited before opening its window.' }
+              $window = Get-Process -Id $launcher.Id -ErrorAction SilentlyContinue
+              if ($window.MainWindowTitle -eq 'Bloop') { $ready = $true; break }
+            }
+            if (-not $ready) { throw 'Portable Bloop did not open its native window.' }
+          } finally {
+            if (Test-Path $stderr) { Get-Content $stderr -Tail 80 | ForEach-Object { $_ -replace 'token=[^ &]+','token=[redacted]' } }
+            taskkill /PID $launcher.Id /T /F 2>$null
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: Bloop-Windows-x64-source
-          path: Bloop-Windows-x64-source.zip
+          name: Bloop-Windows-x64-portable
+          path: |
+            release/Bloop-v*-Windows-x64-portable.zip
+            release/Bloop-v*-Windows-x64-portable.zip.sha256
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: failure()

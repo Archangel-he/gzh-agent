@@ -55,8 +55,8 @@ test('native and command launchers share model routes, data paths and a clean El
     const env = desktopEnvironment({ home: '/fixture/home', data: '/fixture/data', config: { main: { apiKey: 'fixture-main' } }, vision: { apiKey: 'fixture-vision' } }, '/fixture/runtime');
     assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
     assert.equal(env.DSH_HOME, '/fixture/home');
-    assert.equal(env.DSH_DESKTOP_DSH_DIR, '/fixture/data/source-runtime');
-    assert.equal(env.DSH_DESKTOP_PRIMARY_RUNTIME_DIR, '/fixture/runtime/primary-runtime');
+    assert.equal(env.DSH_DESKTOP_DSH_DIR, path.join('/fixture/data', 'source-runtime'));
+    assert.equal(env.DSH_DESKTOP_PRIMARY_RUNTIME_DIR, path.join('/fixture/runtime', 'primary-runtime'));
     assert.equal(env.GZH_MAIN_KEY, 'fixture-main');
     assert.equal(env.GZH_VISION_KEY, 'fixture-vision');
   } finally {

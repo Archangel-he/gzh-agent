@@ -16,7 +16,7 @@ test('bundled design references resolve independently and reject arbitrary file 
 test('new theme and component examples retain their declared styles after the real HTML sanitizer', async () => {
   const assets = [{ id: 'fixture', file: 'fixture.png', role: 'article' }];
   for (const topic of ['editorial', 'warm', 'brief', 'components']) {
-    const examples = [...(await readDesignReference(topic)).matchAll(/```html\n([\s\S]*?)```/g)];
+    const examples = [...(await readDesignReference(topic)).matchAll(/```html\r?\n([\s\S]*?)```/g)];
     assert.ok(examples.length, topic);
     for (const [, example] of examples) {
       const raw = example.replaceAll('素材ID', 'fixture');
