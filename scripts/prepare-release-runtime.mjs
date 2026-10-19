@@ -18,6 +18,6 @@ const run = args => {
   if (result.status !== 0) throw new Error(`Release runtime preparation failed (${result.status}).`);
 };
 await mkdir(paths.packedDsh, { recursive: true });
-run(['pack', '--recursive', '--workspace-concurrency=4', '--filter=@deepseek-ai/dsh...', '--filter=@deepseek-ai/dsh-desktop-host...', '--pack-destination', paths.packedDsh]);
+run(['pack', '--recursive', '--workspace-concurrency=4', '--filter=@deepseek-ai/dsh...', '--filter=@deepseek-ai/dsh-desktop-host...', '--filter=!@deepseek-ai/node-addon-system-darwin-*', '--filter=!@deepseek-ai/node-addon-system-linux-*', '--pack-destination', paths.packedDsh]);
 run(['--dir', 'apps/desktop', 'run', 'prepare:packages', '--from', paths.packedDsh]);
 run(['--dir', 'apps/desktop', 'run', 'prepare:dsh']);
