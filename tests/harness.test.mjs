@@ -28,6 +28,8 @@ test('real Harness delegates vision and image planning, then validates an HTML d
       const names = (input.tools || []).map(t => t.function.name);
       let content, call;
       if (names.includes('submit_article')) {
+        const designPrompt = JSON.stringify(input.messages.filter(m => m.role === 'user'));
+        assert.ok(designPrompt.includes('不是用户指定色板'));
         const results = input.messages.filter(m => m.role === 'tool');
         const references = ['index', 'editorial', 'components', 'images', 'review'];
         if (results.length < references.length) {

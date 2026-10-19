@@ -1,5 +1,6 @@
-import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { brandMacBundle } from '../lib/macos-bundle.mjs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -15,7 +16,6 @@ const { tsImport } = await import(pathToFileURL(require.resolve('tsx/esm/api')))
 const { prepareDevelopmentProject } = await tsImport(path.join(source, 'apps/desktop/scripts/development-project.ts'), { parentURL: import.meta.url });
 const { DESKTOP_HOST_PROTOCOL_VERSION } = await tsImport(path.join(source, 'apps/desktop/src/host-protocol.ts'), { parentURL: import.meta.url });
 const manifest = JSON.parse(await readFile(path.join(source, 'package.json'), 'utf8'));
-const primary = path.join(vendor, 'Contents/Resources/runtime/primary-runtime');
 const versions = JSON.parse(await readFile(path.join(vendor, 'Contents/Resources/runtime/versions.json'), 'utf8'));
 
 await readFile(path.join(source, 'apps/desktop/lib/main.js'));
@@ -34,21 +34,15 @@ prepareDevelopmentProject({
 await mkdir(path.dirname(stage), { recursive: true });
 await rm(stage, { recursive: true, force: true });
 await cp(vendor, stage, { recursive: true, verbatimSymlinks: true });
-// Use the unmodified Electron default-app loader to run the built source application.
+// Launch a signed native app entry while retaining the existing source runtime and data paths.
 await rm(path.join(stage, 'Contents/Resources/app.asar'));
 await rm(path.join(stage, 'Contents/Resources/app.asar.unpacked'), { recursive: true, force: true });
 await rm(path.join(stage, 'Contents/Resources/runtime'), { recursive: true, force: true });
-await rename(path.join(stage, 'Contents/MacOS/DeepSeek Harness'), path.join(stage, 'Contents/MacOS/Electron'));
-const frameworks = path.join(stage, 'Contents/Frameworks');
-for (const name of await readdir(frameworks)) {
-  if (!name.startsWith('DeepSeek Harness Helper') || !name.endsWith('.app')) continue;
-  const helper = path.join(frameworks, name.replace('DeepSeek Harness', 'Electron'));
-  await rename(path.join(frameworks, name), helper);
-  await rename(path.join(helper, 'Contents/MacOS', name.slice(0, -4)), path.join(helper, 'Contents/MacOS', name.replace('DeepSeek Harness', 'Electron').slice(0, -4)));
-  execFileSync('/usr/bin/plutil', ['-replace', 'CFBundleExecutable', '-string', name.replace('DeepSeek Harness', 'Electron').slice(0, -4), path.join(helper, 'Contents/Info.plist')]);
-}
-const quote = text => `'${text.replaceAll("'", "'\\''")}'`;
-await writeFile(path.join(stage, 'Contents/MacOS/GzhAgent'), `#!/bin/sh\nset -e\ncd ${quote(root)}\nexec ${quote(path.join(primary, 'dependencies/node/bin/node'))} ${quote(path.join(root, 'scripts/start-desktop.mjs'))}\n`, { mode: 0o755 });
+await brandMacBundle(stage);
+const appDirectory = path.join(stage, 'Contents/Resources/app');
+await mkdir(appDirectory, { recursive: true });
+await writeFile(path.join(appDirectory, 'package.json'), JSON.stringify({ name: 'Bloop', productName: 'Bloop', version: manifest.version, type: 'module', main: 'main.mjs' }));
+await writeFile(path.join(appDirectory, 'main.mjs'), `await import(${JSON.stringify(pathToFileURL(path.join(root, 'scripts/desktop-main.mjs')).href)});\n`);
 const sharp = (await import('sharp')).default;
 const iconset = path.join(parent, '运行环境/Bloop.iconset');
 await mkdir(iconset, { recursive: true });
@@ -57,10 +51,6 @@ for (const size of [16, 32, 128, 256, 512]) {
 }
 await sharp(path.join(root, 'assets/bloop.svg')).resize(512, 512).png().toFile(path.join(stage, 'Contents/Resources/icon.png'));
 execFileSync('/usr/bin/iconutil', ['-c', 'icns', '-o', path.join(stage, 'Contents/Resources/icon.icns'), iconset]);
-const plist = path.join(stage, 'Contents/Info.plist');
-for (const [key, value] of Object.entries({ CFBundleIdentifier: 'local.gzh.design.agent', CFBundleName: 'Bloop', CFBundleDisplayName: 'Bloop', CFBundleExecutable: 'GzhAgent' })) {
-  execFileSync('/usr/bin/plutil', ['-replace', key, '-string', value, plist]);
-}
 execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', stage], { stdio: 'pipe' });
 execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', stage], { stdio: 'pipe' });
 const backup = output + '.previous';

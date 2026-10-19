@@ -75,7 +75,7 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
     const source = '这是一段需要完整保留、用于验证公众号设计交付的原始正文。';
     const prepared = JSON.parse((await tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。' }, exec)).result);
     assert.equal(prepared.assets.length, 1);
-    assert.equal(tools.size, 9);
+    assert.equal(tools.size, 10);
     const reference = tools.get('gzh_design_reference');
     assert.match((await reference.execute({ topic: 'index' }, exec)).result, /文章配方/);
     await assert.rejects(tools.get('submit_article').execute({ title: '验证文章', html: `<section><p>${source}</p></section>`, notes: '未审稿' }, exec), /提交前请先调用/);

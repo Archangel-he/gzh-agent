@@ -2,10 +2,11 @@ import { readFile, writeFile, appendFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { defineTool } from '@deepseek-ai/dsh-tools';
-import { commitArticle, importLegacyArticle } from './lib/article-revisions.mjs';
+import { commitArticle, importLegacyArticle, withArticleLock } from './lib/article-revisions.mjs';
 import { validateArticle, documentHtml } from './lib/article.mjs';
 import { saveImage, saveWorkspaceImage, readJson, writeJson } from './lib/storage.mjs';
 import { DESIGN_REFERENCES, readDesignReference } from './lib/design-guidance.mjs';
+import { renderDesignAsset } from './lib/design-assets.mjs';
 
 export const name = 'gzh-agent-tools';
 export const inject = ['tools', 'subagents', 'attachments'];
@@ -31,7 +32,7 @@ export async function apply(ctx, config = {}) {
   if (!config.keepBuiltins) {
     ctx.on('agent/created', ({ agent }) => {
       if (!rootId) rootId = agent.session.id;
-      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['gzh_design_reference', 'inspect_images', 'generate_image', 'update_article_assets', 'submit_article'] : [] });
+      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['gzh_design_reference', 'gzh_create_design_asset', 'inspect_images', 'generate_image', 'update_article_assets', 'submit_article'] : [] });
     });
   }
 
@@ -46,6 +47,35 @@ export async function apply(ctx, config = {}) {
       await log(`设计参考：${args.topic}`);
       if (args.topic === 'review') reviewRead = true;
       return { result: reference };
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: 'gzh_create_design_asset',
+    description: '用本地确定性矢量排版生成原创中文艺术题图或章节分隔图（宋/黑/楷对比、空心描边或反白镂空），并注册真实PNG素材。不调用生图接口、不修改照片、不复制案例Logo；仅适合用户选择的自然/校园文艺风，普通简报无需调用。每篇素材上限仍为六张。',
+    parameters: {
+      kind: { type: 'string', enum: ['cover', 'divider'], required: true },
+      title_lines: { type: 'array', items: { type: 'string' }, description: 'cover需1–3行用户文章标题，每行最多14字；divider可省。不得编造活动信息。' },
+      subtitle: { type: 'string', description: '可选，来自用户原文的短副标题，最多36字。' },
+      color: { type: 'string', description: '可选，#RRGGBB格式的主题色，默认植物绿。' },
+      font_style: { type: 'string', enum: ['serif', 'sans', 'calligraphic', 'contrast'], description: '宋体、黑体、楷体或有目的的字体对比。默认serif；具体字体按系统可用字体回退，PNG生成后效果固定。' },
+      title_effect: { type: 'string', enum: ['solid', 'outline', 'cutout', 'mixed'], description: '实心、空心描边、反白镂空或混合处理；默认solid；艺术效果按用户选择启用，不默认混搭。只在题图上处理，正文仍为可编辑HTML。' },
+    }, output: textOutput,
+    async execute(args, exec) {
+      return withArticleLock(directory, async () => {
+        await rootOnly(exec);
+        if (job.assets.length >= 6) throw new Error('每篇最多六张素材，请复用已有设计图。');
+        exec.signal.throwIfAborted();
+        const bytes = await renderDesignAsset(args);
+        exec.signal.throwIfAborted();
+        const asset = await saveImage(directory, { name: args.kind === 'cover' ? '原创排版题图' : '原创章节分隔图', dataUrl: `data:image/png;base64,${bytes.toString('base64')}` });
+        const created = { ...asset, source: 'design' };
+        try { await writeJson(path.join(directory, 'job.json'), { ...job, assets: [...job.assets, created] }); }
+        catch (error) { await rm(path.join(directory, 'assets', asset.file), { force: true }); throw error; }
+        job.assets.push(created);
+        await log(`本地设计图：${args.kind}`);
+        return { result: JSON.stringify({ asset: { ...created, src: `asset://${created.id}` }, next: '在正文中引用此素材ID；原文正文保持HTML可编辑文字，不要把整篇文章做成图片。' }) };
+      });
     },
   }));
 

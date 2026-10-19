@@ -29,16 +29,7 @@ export async function prepareDesktop(root = appRoot) {
   return { home, data, config, vision };
 }
 
-export async function startDesktop() {
-  const windows = process.platform === 'win32';
-  const source = windows ? path.join(appRoot, 'data', 'harness-source') : path.resolve(appRoot, '..', 'deepseek-harness');
-  const sourceApp = path.join(source, 'apps/desktop');
-  const buildPaths = windows ? (await import(pathToFileURL(path.join(sourceApp, 'scripts/desktop-build-paths.mjs')))).desktopTargetBuildPaths('win-x64') : undefined;
-  const binary = windows ? path.join(buildPaths.electron, 'electron.exe') : path.join(desktopApp, 'Contents', 'MacOS', 'Electron');
-  await access(binary);
-  const { home, data, config, vision } = await prepareDesktop();
-  const log = await open(path.join(data, 'desktop.log'), 'a', 0o600);
-  const vendorRuntime = windows ? buildPaths.runtime : path.resolve(appRoot, '..', 'DeepSeek Harness.app/Contents/Resources/runtime');
+export function desktopEnvironment({ home, data, config, vision }, vendorRuntime) {
   /* A host Electron app (or DSH) can export ELECTRON_RUN_AS_NODE=1. Inheriting it
      makes this Electron binary behave like plain Node and reject Chromium flags. */
   const childEnv = { ...process.env, BLOOP_PERFORMANCE: '1', DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1', GZH_DATA_DIR: data, DSH_PERMISSION_MODE: 'danger-full-access',
@@ -48,6 +39,29 @@ export async function startDesktop() {
     DSH_DESKTOP_PNPM_ENTRY: path.join(vendorRuntime, 'primary-runtime/dependencies/pnpm/bin/pnpm.mjs'),
     GZH_MAIN_KEY: config.main.apiKey, GZH_VISION_KEY: vision.apiKey, DEEPSEEK_API_KEY: config.main.apiKey };
   delete childEnv.ELECTRON_RUN_AS_NODE;
+  return childEnv;
+}
+
+export async function startDesktop() {
+  const windows = process.platform === 'win32';
+  if (process.platform === 'darwin') {
+    const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+    const launch = spawn('/usr/bin/open', ['-a', desktopApp], { stdio: 'inherit', env });
+    await new Promise((resolve, reject) => {
+      launch.once('error', reject);
+      launch.once('exit', code => code === 0 ? resolve() : reject(new Error('无法打开 Bloop.app，请先重新构建桌面应用。')));
+    });
+    return;
+  }
+  const source = windows ? path.join(appRoot, 'data', 'harness-source') : path.resolve(appRoot, '..', 'deepseek-harness');
+  const sourceApp = path.join(source, 'apps/desktop');
+  const buildPaths = windows ? (await import(pathToFileURL(path.join(sourceApp, 'scripts/desktop-build-paths.mjs')))).desktopTargetBuildPaths('win-x64') : undefined;
+  const binary = windows ? path.join(buildPaths.electron, 'electron.exe') : path.join(desktopApp, 'Contents', 'MacOS', 'Electron');
+  await access(binary);
+  const { home, data, config, vision } = await prepareDesktop();
+  const log = await open(path.join(data, 'desktop.log'), 'a', 0o600);
+  const vendorRuntime = windows ? buildPaths.runtime : path.resolve(appRoot, '..', 'DeepSeek Harness.app/Contents/Resources/runtime');
+  const childEnv = desktopEnvironment({ home, data, config, vision }, vendorRuntime);
   const child = spawn(binary, [`--user-data-dir=${path.join(data, 'desktop-user-data')}`, '--force-renderer-accessibility', sourceApp], {
     cwd: appRoot, stdio: ['ignore', log.fd, log.fd],
     env: childEnv,
