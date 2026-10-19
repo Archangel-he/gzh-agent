@@ -238,7 +238,7 @@ function registerSession(ctx, skill, agent, pluginConfig) {
       const answeredUser = history.some(e => e.type === 'tool/result' && !e.data.message.isError && history.some(call => call.type === 'assistant/message' && call.data.message.content?.some(b => b.type === 'tool-call' && b.name === 'ask_user_question' && b.id === e.data.message.toolCallId)) && e.data.message.content?.some(b => {
         if (b.type !== 'text') return false;
         try { const result = JSON.parse(b.text); return !result.pending && Array.isArray(result.answers) && result.answers.length > 0; } catch { return false; }
-      })) || history.some(e => e.type === 'user/message' && e.data.message?.source?.kind === 'user-question-reply' && e.data.message.source.outcome === 'answered');
+      })) || history.some(e => e.type === 'user/message' && e.data.source?.kind === 'user-question-reply' && e.data.source.outcome === 'answered');
       if (!askedUser || !answeredUser) throw new Error('必须先调用内置 ask_user_question 向用户弹出七项问卷（标题字体字号、正文字体字号、首图、尾图、署名、整体风格、配图偏好）并等待用户回复；在用户回复之前不得建立任务、排版或生成图片。');
       if (!args.questionnaire || typeof args.questionnaire !== 'object' || Array.isArray(args.questionnaire)) throw new Error('缺少 questionnaire 参数。请把用户对七项问卷的回答原样填入后重新调用；不得代答或猜测。');
       const questionnaire = {};

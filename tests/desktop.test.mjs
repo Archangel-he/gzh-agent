@@ -83,6 +83,9 @@ test('desktop sessions retain builtin tools, ingest chat images, delegate with t
       { type: 'tool/result', data: { message: { toolCallId: 'ask-pending', content: [{ type: 'text', text: '{"pending":true}' }] } } },
     ];
     await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。', questionnaire: {} }, exec), /ask_user_question/);
+    const pendingHistory = agent.session.snapshotEvents();
+    agent.session.snapshotEvents = () => [...pendingHistory, {type: 'user/message', data: {source: {kind: 'user-question-reply', callId: 'ask-pending', outcome: 'answered'}, content: []}}];
+    await assert.rejects(tools.get('gzh_prepare_article').execute({ text: source, instruction: '保留原文。' }, exec), /questionnaire/);
     agent.session.snapshotEvents = () => [
       { type: 'assistant/message', data: { message: { content: [{ type: 'tool-call', name: 'ask_user_question', id: 'ask-1' }] } } },
       { type: 'tool/result', data: { message: { toolCallId: 'ask-1', content: [{ type: 'text', text: '{"answers":[{"id":"title_font","selected":["思源宋体 24px"]},{"id":"body_font","selected":["思源黑体 16px"]}]}' }] } } },
