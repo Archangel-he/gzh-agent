@@ -10,6 +10,8 @@
     "start": "node scripts/start-desktop.mjs",
     "build:desktop": "node scripts/build-desktop.mjs",
     "setup:windows": "node scripts/setup-windows.mjs",
+    "setup:image": "node scripts/setup-image.mjs",
+    "check:image": "node scripts/check-image-service.mjs",
     "start:web-prototype": "node server.mjs",
     "test": "node --test tests/*.test.mjs"
   },
@@ -20,9 +22,11 @@
   "dependencies": {
     "@deepseek-ai/dsh-sdk-client": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5",
     "htmlparser2": "12.0.0",
     "sanitize-html": "2.18.1",
-    "sharp": "0.35.5"
+    "sharp": "0.35.5",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "pnpm": "11.28.5"

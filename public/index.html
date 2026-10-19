@@ -7,6 +7,7 @@
     <div class="workspace-label">你的内容工作室</div>
     <button class="nav active" id="newProject"><span>✦</span> 新建文章</button>
     <button class="nav" id="settingsBtn"><span>⚙</span> 模型设置 <i id="configDot"></i></button>
+    <button class="nav" id="imageApiBtn"><span>🖼</span> 配置API <i id="imageApiDot"></i></button>
     <div class="history-label">最近的作品 <span id="historyCount">0</span></div>
     <div id="history" class="history"><p class="muted">第一篇作品，从这里开始。</p></div>
     <div class="sidebar-bottom"><span class="tiny-dot"></span> 本地工作空间<small>素材与作品保存在这台电脑上</small></div>
@@ -42,5 +43,6 @@
     </div>
   </main>
   <dialog id="settingsDialog"><form id="settingsForm"><div class="dialog-header"><div><span class="eyebrow">MODEL CONNECTIONS</span><h2>连接你的模型</h2></div><button type="button" id="closeSettings" class="close" aria-label="关闭设置">×</button></div><p class="dialog-description">密钥只保存在本地服务端，保存后不回显。修改地址时请使用服务商的 API 基础地址。</p><div id="providerFields"></div><p class="settings-note">视觉模型留空时使用主模型；生图接口需支持 images/generations 并返回 b64_json 图片。</p><button class="primary save-settings" type="submit">保存模型设置</button></form></dialog>
+  <dialog id="imageApiDialog"><form id="imageApiForm"><div class="dialog-header"><div><span class="eyebrow">IMAGE SERVICE</span><h2>配置生图 API</h2></div><button type="button" id="closeImageApi" class="close" aria-label="关闭配置">×</button></div><p class="dialog-description">填你自己的生图服务，费用计入你自己的账号。密钥只保存在本机，保存后不回显、不进对话。</p><div class="provider-card" data-provider="image"><label>API 基础地址<input type="text" name="baseUrl" autocomplete="off" placeholder="https://你的服务商/v3"></label><label>模型名称<input type="text" name="model" autocomplete="off" placeholder="按服务商提供的名称填写"></label><label>API 密钥<input type="password" name="apiKey" autocomplete="new-password" placeholder="填写密钥"></label><label class="checkbox" id="imageApiClearWrap" hidden><input type="checkbox" name="clearKey" style="display:inline;width:auto"><span>清除已保存的生图密钥</span></label></div><p class="settings-note">生图接口需支持 images/generations；响应可为 b64_json 或 url（如 Seedream 的 jpg 链接）。</p><button class="primary save-settings" type="submit">保存生图配置</button></form></dialog>
   <div role="status" class="toast" id="toast" hidden></div>
 </body></html>

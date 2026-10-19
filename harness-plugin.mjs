@@ -1,9 +1,12 @@
 import { readFile, writeFile, appendFile, rename, mkdir, copyFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { validateArticle, documentHtml } from './lib/article.mjs';
 import { saveImage, saveWorkspaceImage, readJson, writeJson } from './lib/storage.mjs';
+import { receiveGeneratedImage } from './lib/image-service.mjs';
+import { resolveImageConfig } from './lib/image-config.mjs';
 
 export const name = 'gzh-agent-tools';
 export const inject = ['tools', 'subagents', 'attachments'];
@@ -12,10 +15,12 @@ export async function apply(ctx, config = {}) {
   const directory = config.directory || process.env.GZH_JOB_DIR;
   if (!directory) throw new Error('GZH_JOB_DIR 未配置。');
   const job = await readJson(path.join(directory, 'job.json'));
-  const imageConfig = config.imageConfig || JSON.parse(process.env.GZH_IMAGE_CONFIG || '{}');
-  let rootId = config.rootId, visionCalls = 0, imageCalls = 0, submissions = 0;
+  // Non-secret fallback from settings.json; each machine's own key is layered on
+  // per request from the harness credential store (see lib/image-config.mjs).
+  const baseImageConfig = config.imageConfig || JSON.parse(process.env.GZH_IMAGE_CONFIG || '{}');
+  let rootId = config.rootId, visionCalls = 0, imageCalls = 0, coverCalls = 0, submissions = 0;
   ctx.on('session/event', (session, event) => {
-    if (session.id === rootId && event.type === 'turn/start') { visionCalls = 0; imageCalls = 0; submissions = 0; }
+    if (session.id === rootId && event.type === 'turn/start') { visionCalls = 0; imageCalls = 0; coverCalls = 0; submissions = 0; }
   });
   const log = message => appendFile(path.join(directory, 'events.jsonl'), JSON.stringify({ time: new Date().toISOString(), message }) + '\n');
   const textOutput = { schema: { type: 'object', properties: { result: { type: 'string', required: true } }, additionalProperties: false }, render: (_args, value) => [{ type: 'text', text: value.result }] };
@@ -27,16 +32,18 @@ export async function apply(ctx, config = {}) {
   if (!config.keepBuiltins) {
     ctx.on('agent/created', ({ agent }) => {
       if (!rootId) rootId = agent.session.id;
-      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['inspect_images', 'generate_image', 'update_article_assets', 'submit_article'] : [] });
+      agent.ctx.tools.restrict({ allow: agent.session.id === rootId ? ['inspect_images', 'generate_image', 'generate_cover', 'update_article_assets', 'submit_article'] : [] });
     });
   }
 
   async function child(exec, label, prompt, provider) {
     await log(`${label}：已启动 Harness 子 Agent`);
     prompt = [{ type: 'text', text: '你只负责本次受委派的识图或插图提示词任务。直接分析提供的内容，不调用工具，不查看文件或设置，不做文章排版，不启动其他 Agent。总回复不超过 600 个汉字；颜色和尺寸无法直接确定时标记近似或未知。' }, ...prompt];
+    // Desktop installs without a routed business key map onto the native provider.
+    const realProvider = config.providerMap?.[provider] || provider;
     const request = {
       parent: exec.agent, prompt, maxDepth: 1,
-      agentOptions: { provider, model: config.models?.[provider] || process.env[provider === 'gzh-vision' ? 'GZH_VISION_MODEL' : 'GZH_MAIN_MODEL'], maxTokens: 4096 },
+      agentOptions: { provider: realProvider, model: config.models?.[provider] || process.env[provider === 'gzh-vision' ? 'GZH_VISION_MODEL' : 'GZH_MAIN_MODEL'], maxTokens: 4096 },
     };
     // The desktop ships 0.2.1; the published SDK currently ships 0.2.0.
     const activation = ctx.subagents.startActivation
@@ -73,33 +80,95 @@ export async function apply(ctx, config = {}) {
   }));
 
   ctx.tools.register(defineTool({
-    name: 'generate_image', description: '按文章需要委派生图策划子 Agent，然后调用已配置的 images/generations 服务并保存实际图片。仅在用户允许生图时调用。',
+    name: 'generate_image', description: '按文章需要委派生图策划子 Agent，然后调用已配置的 images/generations 服务并保存实际图片。仅在用户允许生图时调用。生成的推文配图（含首图、尾图）必须插入正文 HTML 对应段落；封面图请改用 generate_cover。',
     parameters: { brief: { type: 'string', required: true, description: '画面目的、内容、风格、构图与配色。' }, alt: { type: 'string', required: true, description: '图片说明。' } },
     output: textOutput,
     async execute(args, exec) {
       rootOnly(exec);
       if (job.assets.length >= 6) throw new Error('每篇最多六张素材，请先使用已有配图或替换素材。');
       if (!job.generateImages) throw new Error('用户本次未允许生成图片。');
-      if (!imageConfig.apiKey || !imageConfig.baseUrl || !imageConfig.model) throw new Error('生图服务未配置。请保留用户原图并说明限制，不能伪造图片。');
-      if (++imageCalls > 2) throw new Error('本任务生图上限为两张。');
+      const imageConfig = await resolveImageConfig(ctx.get?.('credentials'), baseImageConfig);
+      if (!imageConfig.configured) throw new Error('生图服务未配置：请在桌面版「设置 → 模型 → 生图服务」填写你自己的服务地址、模型与密钥，或在终端运行 `npm run setup:image`（费用计入你自己的账号）；本条不能伪造图片，请保留用户原图并说明限制。');
+      if (++imageCalls > 6) throw new Error('本轮生图上限为六张（与每篇六张素材上限一致），请使用已有素材并说明缺失。');
       const prompt = await child(exec, '生图策划', [{ type: 'text', text: `你是文章插图设计子 Agent。根据简报输出一段可直接传给生图服务的精确提示词，只输出提示词。避免文字、数字、Logo 和二维码，禁止伪造纪实证据。简报：${args.brief}` }], 'gzh-main');
       await log('生图服务：正在生成实际图片');
       const response = await fetch(imageConfig.baseUrl + '/images/generations', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${imageConfig.apiKey}` },
-        body: JSON.stringify({ model: imageConfig.model, prompt, n: 1, size: '1024x1024', response_format: 'b64_json' }),
+        body: JSON.stringify({ model: imageConfig.model, prompt, n: 1, size: '1024x1024' }),
         signal: AbortSignal.any([exec.signal, AbortSignal.timeout(120_000)]),
       });
-      if (!response.ok) throw new Error(`生图接口返回 HTTP ${response.status}。`);
-      const payload = await response.json();
-      const base64 = payload.data?.[0]?.b64_json;
-      // shortcut: accept base64 image responses only; add a bounded trusted-CDN downloader for URL-only providers.
-      if (typeof base64 !== 'string' || base64.length > 7_000_000) throw new Error('生图接口必须返回 data[0].b64_json，图片不超过 5 MB；当前未接收 URL 型返回。');
-      const asset = await saveImage(directory, { name: args.alt, dataUrl: `data:image/png;base64,${base64}`, role: 'article' });
+      if (!response.ok) throw new Error(`生图接口返回 HTTP ${response.status}：${(await response.text()).slice(0, 300)}`);
+      // Accepts b64_json and URL responses (e.g. Seedream jpg links); URLs go through the bounded public downloader.
+      const generated = await receiveGeneratedImage(await response.json(), { signal: exec.signal, download: config.downloadGeneratedImage });
+      const asset = await saveImage(directory, { name: args.alt, dataUrl: `data:${generated.mime};base64,${generated.bytes.toString('base64')}`, role: 'article' });
       asset.source = 'generated';
       job.assets.push(asset);
       await writeJson(path.join(directory, 'job.json'), job);
       await log(`图片已保存：${asset.width} × ${asset.height}`);
       return { result: JSON.stringify({ ...asset, src: `asset://${asset.id}` }) };
+    },
+  }));
+
+  ctx.tools.register(defineTool({
+    name: 'generate_cover', description: '生成或合成推文封面「大字海报」：突出文章核心主题，输出 2.35:1 横版、1:1 方形和两者拼接图，独立保存在 assets/ 下，不插入正文 HTML。present 交付时须单独提供封面文件路径。生图服务未配置时可传 source_asset_id 用已有素材合成。',
+    parameters: {
+      title: { type: 'string', required: true, description: '封面大字主标题，须突出推文核心主题，不超过 40 字。' },
+      brief: { type: 'string', required: true, description: '海报风格、配色与构图要求。' },
+      source_asset_id: { type: 'string', description: '可选，用本任务已有素材合成封面，跳过生图服务。' },
+    },
+    output: textOutput,
+    async execute(args, exec) {
+      rootOnly(exec);
+      const title = String(args.title ?? '').trim();
+      if (!title || title.length > 40) throw new Error('封面主标题不能为空，且不超过 40 字。');
+      if (!String(args.brief ?? '').trim()) throw new Error('请填写封面风格简报。');
+      if (++coverCalls > 2) throw new Error('本轮封面生成上限为两次，请使用已有封面文件并说明限制。');
+      let bytes;
+      let mode;
+      if (args.source_asset_id) {
+        const asset = job.assets.find(a => a.id === args.source_asset_id);
+        if (!asset) throw new Error('source_asset_id 必须是本任务已有素材 ID。');
+        bytes = await readFile(path.join(directory, 'assets', asset.file));
+        mode = 'composed';
+      } else {
+        const imageConfig = await resolveImageConfig(ctx.get?.('credentials'), baseImageConfig);
+        if (!imageConfig.configured) throw new Error('生图服务未配置：请在桌面版「设置 → 模型 → 生图服务」填写你自己的服务地址、模型与密钥，或在终端运行 `npm run setup:image`（费用计入你自己的账号）；也可改传 source_asset_id 用已有素材合成封面，或保留说明限制，不能伪造封面。');
+        const prompt = await child(exec, '封面策划', [{ type: 'text', text: `你是封面「大字海报」设计子 Agent。根据简报输出一段可直接传给生图服务的精确提示词，只输出提示词。要求：海报构图简洁有冲击力，画面以醒目大字呈现标题「${title}」，文字必须清晰可读、无错别字，不出现其他多余文字、Logo 和二维码，不伪造纪实证据。风格与配色：${args.brief}` }], 'gzh-main');
+        await log('生图服务：正在生成封面海报');
+        const response = await fetch(imageConfig.baseUrl + '/images/generations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${imageConfig.apiKey}` },
+          body: JSON.stringify({ model: imageConfig.model, prompt, n: 1, size: '1024x1024' }),
+          signal: AbortSignal.any([exec.signal, AbortSignal.timeout(120_000)]),
+        });
+        if (!response.ok) throw new Error(`生图接口返回 HTTP ${response.status}：${(await response.text()).slice(0, 300)}`);
+        const generated = await receiveGeneratedImage(await response.json(), { signal: exec.signal, download: config.downloadGeneratedImage });
+        bytes = generated.bytes;
+        mode = 'generated';
+      }
+      exec.signal.throwIfAborted();
+      // Normalize to a 1024×1024 poster, then derive the 2.35:1 banner (1024×436) and the stacked combined sheet.
+      const square = await sharp(bytes, { limitInputPixels: 40_000_000, failOn: 'warning' }).rotate().resize(1024, 1024, { fit: 'cover', position: 'centre' }).png().toBuffer();
+      const wide = await sharp(square).extract({ left: 0, top: 294, width: 1024, height: 436 }).png().toBuffer();
+      const combined = await sharp({ create: { width: 1024, height: 1460, channels: 3, background: '#ffffff' } })
+        .composite([{ input: wide, top: 0, left: 0 }, { input: square, top: 436, left: 0 }])
+        .png().toBuffer();
+      await mkdir(path.join(directory, 'assets'), { recursive: true });
+      const cover = { title, mode, wide: 'cover-wide.png', square: 'cover-square.png', combined: 'cover-combined.png', createdAt: new Date().toISOString() };
+      for (const [file, data] of [[cover.wide, wide], [cover.square, square], [cover.combined, combined]]) {
+        await writeFile(path.join(directory, 'assets', file), data);
+      }
+      job.cover = cover;
+      await writeJson(path.join(directory, 'job.json'), job);
+      await log(`封面已保存：${mode}，2.35:1 与 1:1 及拼接图`);
+      return { result: JSON.stringify({
+        cover: {
+          combined: path.join(directory, 'assets', cover.combined),
+          wide: path.join(directory, 'assets', cover.wide),
+          square: path.join(directory, 'assets', cover.square),
+          ratio: { wide: '2.35:1 (1024×436)', square: '1:1 (1024×1024)', combined: '1024×1460 拼接图' },
+        },
+        next: '封面是独立交付文件，不插入正文 HTML，也不计入六张素材。submit_article 成功后用 present 交付正文与预览，并单独提供以上封面文件路径。',
+      }) };
     },
   }));
 
@@ -162,7 +231,7 @@ export async function apply(ctx, config = {}) {
     }, output: textOutput,
     async execute(args, exec) {
       rootOnly(exec);
-      if (++submissions > 3) throw new Error('修复提交已达三次上限，请停止并报告问题。');
+      if (++submissions > 5) throw new Error('修复提交已达五次上限，请停止并报告问题。');
       const checked = validateArticle(args.html, { assets: job.assets, source: job.text });
       if (checked.errors.length) {
         await log(`HTML 检查需修复：${checked.errors.join('；')}`);
@@ -191,7 +260,15 @@ export async function apply(ctx, config = {}) {
       await log('正文 HTML 已通过检查并保存');
       config.onSubmitted?.();
       if (!config.keepBuiltins) exec.concludeTurn();
-      return { result: JSON.stringify({ status: 'validated', article: path.join(directory, 'article.html'), preview: path.join(directory, 'preview.html'), warnings: checked.warnings, next: config.keepBuiltins ? '现在用内置 present 交付这两个文件，结束本轮设计；用户提出修改后再继续。' : '结束本轮设计。' }) };
+      const cover = job.cover ? {
+        combined: path.join(directory, 'assets', job.cover.combined),
+        wide: path.join(directory, 'assets', job.cover.wide),
+        square: path.join(directory, 'assets', job.cover.square),
+      } : null;
+      const delivery = cover
+        ? `现在用内置 present 交付 article.html 与 preview.html，并单独提供封面文件路径（拼接图 ${cover.combined}，另有 2.35:1 ${cover.wide} 与 1:1 ${cover.square}）供用户下载，结束本轮设计；用户提出修改后再继续。`
+        : '现在用内置 present 交付这两个文件，结束本轮设计；用户提出修改后再继续。';
+      return { result: JSON.stringify({ status: 'validated', article: path.join(directory, 'article.html'), preview: path.join(directory, 'preview.html'), cover, warnings: checked.warnings, next: config.keepBuiltins ? delivery : '结束本轮设计。' }) };
     },
   }));
   await writeFile(path.join(directory, 'plugin-ready'), 'gzh-agent-tools');

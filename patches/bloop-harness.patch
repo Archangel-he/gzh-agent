@@ -1158,6 +1158,433 @@ index 2f46ad20..fda51fdc 100644
 +    expect(screen.queryByRole('button', { name: 'Agent presets' })).toBeNull()
 +  } finally { vi.unstubAllEnvs() }
 +})
+diff --git a/packages/client/ui-settings-models/src/client/bloop/ImageServiceCard.tsx b/packages/client/ui-settings-models/src/client/bloop/ImageServiceCard.tsx
+new file mode 100644
+index 00000000..2cea76b4
+--- /dev/null
++++ b/packages/client/ui-settings-models/src/client/bloop/ImageServiceCard.tsx
+@@ -0,0 +1,278 @@
++/**
++ * The image-service card Bloop adds below the Models rows: the endpoint this
++ * machine generates article illustrations and covers against, and the key that
++ * pays for them.
++ *
++ * It registers into `settings.models.footer`, the extension seat this section
++ * declares for a plugin distributed outside the repository, so the Models page
++ * keeps sole ownership of its provider rows. All three values — address, model,
++ * and key — ride the credential seam under this machine's own references
++ * (`GZH_IMAGE_BASEURL`, `GZH_IMAGE_MODEL`, `GZH_IMAGE_KEY`): the seam stores them
++ * in `$DSH_HOME/.credentials.yaml` (0600, hot-reloaded) and never returns a
++ * value, so the editor is write-only and the closed row shows presence dots
++ * rather than echoing anything back. A blank field keeps the stored value.
++ *
++ * @module dsh-client-ui-settings-models/client/bloop/ImageServiceCard
++ */
++
++import { useEffect, useState } from 'react'
++import type { ReactNode } from 'react'
++import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
++import { ApiKeyInput } from '../ApiKeyInput.tsx'
++import { EditorFooter } from '../EditorFooter.tsx'
++import type { en } from '../locales.ts'
++import styles from '../ModelsSection.module.css'
++
++/** What one read answered about this machine's image service. */
++export interface ImageServiceState {
++  /** Whether the credential seam this card writes through is writable here. */
++  readonly available: boolean
++  /** Whether a key is stored under this machine's own reference. */
++  readonly keyConfigured: boolean
++  /** Whether an endpoint (address + model) is stored under this machine's references. */
++  readonly endpointConfigured: boolean
++  /** Why the read could not answer, as the Host phrased it. */
++  readonly message: string | undefined
++}
++
++/** Registration-side dependencies of {@link ImageServiceCard}. */
++export interface ImageServiceInjected {
++  /** Read whether the endpoint and the key are configured. */
++  read: () => Promise<ImageServiceState>
++  /**
++   * Store the two endpoint fields. Values ride the credential seam, which never
++   * returns them, so the editor is write-only and opens blank each time.
++   * @param baseUrl - endpoint the generations are sent to.
++   * @param model - model name the endpoint serves.
++   * @returns the refusal message, or undefined once stored.
++   */
++  saveEndpoint: (baseUrl: string, model: string) => Promise<string | undefined>
++  /**
++   * Store one key literal under this machine's reference.
++   * @param value - the non-empty secret.
++   * @returns the refusal message, or undefined once stored.
++   */
++  storeKey: (value: string) => Promise<string | undefined>
++  /**
++   * Remove the stored key.
++   * @returns the refusal message, or undefined once removed.
++   */
++  removeKey: () => Promise<string | undefined>
++  /** Section copy. */
++  t: (key: keyof typeof en) => string
++}
++
++/** Footer owner props plus this card's injected face. */
++export type ImageServiceCardProps =
++  PropsRuntime<'settings.models.footer'> & InjectFace<ImageServiceInjected>
++
++/** Whether a draft endpoint is an address the image service could be called at. */
++function isHttpUrl(value: string): boolean {
++  try {
++    const protocol = new URL(value).protocol
++    return protocol === 'http:' || protocol === 'https:'
++  } catch {
++    return false
++  }
++}
++
++/**
++ * Render the image-service card: a closed row that states whether a key is
++ * configured, and the endpoint editor behind its own control.
++ * @param props - the Host callbacks and section copy this card was registered with.
++ * @returns the card, or nothing until its first read answered.
++ */
++export function ImageServiceCard(props: ImageServiceCardProps): ReactNode {
++  const { read, saveEndpoint, storeKey, removeKey, t } = props
++  const [state, setState] = useState<ImageServiceState | undefined>(undefined)
++  const [open, setOpen] = useState(false)
++  const [baseUrl, setBaseUrl] = useState('')
++  const [model, setModel] = useState('')
++  const [keyDraft, setKeyDraft] = useState('')
++  const [busy, setBusy] = useState(false)
++  const [failure, setFailure] = useState<string | undefined>(undefined)
++  const [saved, setSaved] = useState(false)
++
++  useEffect(() => {
++    let live = true
++    void read().then((answered) => { if (live) setState(answered) })
++    return () => { live = false }
++  }, [read])
++
++  if (state === undefined) return null
++
++  const normalizedBaseUrl = baseUrl.trim()
++  const normalizedModel = model.trim()
++  const baseUrlInvalid = normalizedBaseUrl.length > 0 && !isHttpUrl(normalizedBaseUrl)
++  // The endpoint is all-or-nothing: half an endpoint would point generations at
++  // an address with no model, or a model with no address.
++  const endpointDrafted = normalizedBaseUrl.length > 0 || normalizedModel.length > 0
++  const endpointReady = normalizedBaseUrl.length > 0 && normalizedModel.length > 0 && !baseUrlInvalid
++  // A blank key field keeps the stored key; only a non-blank draft is written.
++  const keyValue = keyDraft.trim()
++  const writable = state.available
++  const ready = writable && !busy && (keyValue.length > 0 || endpointReady)
++  const hint = failure !== undefined || ready || !writable
++    ? undefined
++    : baseUrlInvalid
++      ? t('imageBaseUrlInvalid')
++      : endpointDrafted
++        ? t('imageNeedsBothEndpoint')
++        : t('imageNeedsFields')
++
++  const toggle = (): void => {
++    const next = !open
++    setOpen(next)
++    setFailure(undefined)
++    setSaved(false)
++    if (next) {
++      setBaseUrl('')
++      setModel('')
++      setKeyDraft('')
++    }
++  }
++
++  const save = async (): Promise<void> => {
++    setBusy(true)
++    setFailure(undefined)
++    setSaved(false)
++    try {
++      if (endpointReady) {
++        const endpointFailure = await saveEndpoint(normalizedBaseUrl, normalizedModel)
++        if (endpointFailure !== undefined) { setFailure(endpointFailure); return }
++      }
++      if (keyValue.length > 0) {
++        const keyFailure = await storeKey(keyValue)
++        if (keyFailure !== undefined) { setFailure(keyFailure); return }
++      }
++      setBaseUrl('')
++      setModel('')
++      setKeyDraft('')
++      setSaved(true)
++      setOpen(false)
++      setState(await read())
++    } finally {
++      setBusy(false)
++    }
++  }
++
++  const clearKey = async (): Promise<void> => {
++    setBusy(true)
++    setFailure(undefined)
++    try {
++      const outcome = await removeKey()
++      if (outcome !== undefined) { setFailure(outcome); return }
++      setState(await read())
++    } finally {
++      setBusy(false)
++    }
++  }
++
++  const keyLabel = t(state.keyConfigured ? 'imageKeyConfigured' : 'imageKeyMissing')
++  const endpointLabel = t(state.endpointConfigured ? 'imageEndpointConfigured' : 'imageEndpointMissing')
++  return (
++    <div className={styles['rowCard']} data-bloop-image-service>
++      <div className={styles['rowHead']}>
++        <span className={styles['rowIdentity']}>
++          <span className={styles['rowName']}>{t('imageTitle')}</span>
++          <span className={styles['rowTag']}>{t('imageTag')}</span>
++          <span
++            className={`${styles['credentialDot']} ${state.endpointConfigured
++              ? styles['credentialDotConfigured']
++              : styles['credentialDotMissing']}`}
++            role="img"
++            aria-label={endpointLabel}
++            title={endpointLabel}
++          />
++          <span
++            className={`${styles['credentialDot']} ${state.keyConfigured
++              ? styles['credentialDotConfigured']
++              : styles['credentialDotMissing']}`}
++            role="img"
++            aria-label={keyLabel}
++            title={keyLabel}
++          />
++        </span>
++        <span className={styles['rowActions']}>
++          <button
++            type="button"
++            className={styles['secondaryButton']}
++            aria-expanded={open}
++            disabled={busy}
++            onClick={toggle}
++          >
++            {t('imageConfigure')}
++          </button>
++        </span>
++      </div>
++      <p className={styles['advancedHint']}>{t('imageIntro')}</p>
++      {saved ? <p className={styles['savedNotice']} role="status">{t('imageSaved')}</p> : null}
++      {!state.available ? <p className={styles['error']}>{t('imageUnavailable')}</p> : null}
++      {open ? (
++        <div className={styles['editor']}>
++          <div className={styles['field']}>
++            <span className={styles['fieldLabel']}>{t('imageBaseUrl')}</span>
++            <input
++              className={styles['input']}
++              type="text"
++              value={baseUrl}
++              placeholder={t('imageBaseUrlPlaceholder')}
++              aria-label={t('imageBaseUrl')}
++              aria-invalid={baseUrlInvalid}
++              disabled={!writable || busy}
++              onChange={(event) => { setBaseUrl(event.target.value) }}
++            />
++          </div>
++          {baseUrlInvalid ? <p className={styles['error']}>{t('imageBaseUrlInvalid')}</p> : null}
++          <div className={styles['field']}>
++            <span className={styles['fieldLabel']}>{t('imageModel')}</span>
++            <input
++              className={styles['input']}
++              type="text"
++              value={model}
++              placeholder={t('imageModelPlaceholder')}
++              aria-label={t('imageModel')}
++              disabled={!writable || busy}
++              onChange={(event) => { setModel(event.target.value) }}
++            />
++          </div>
++          <div className={styles['field']}>
++            <span className={styles['fieldLabel']}>{t('keyInput')}</span>
++            <ApiKeyInput
++              t={t}
++              value={keyDraft}
++              placeholder={t(state.keyConfigured ? 'keyPlaceholderSaved' : 'keyPlaceholder')}
++              aria-label={t('keyInput')}
++              disabled={!writable || busy}
++              onChange={(event) => { setKeyDraft(event.target.value) }}
++            />
++            <p className={styles['advancedHint']}>{t('imageKeyHint')}</p>
++          </div>
++          {failure !== undefined ? <p className={styles['error']}>{failure}</p> : null}
++          {hint === undefined ? null : <p className={styles['advancedHint']}>{hint}</p>}
++          <EditorFooter
++            t={t}
++            busy={busy}
++            submitDisabled={!ready}
++            submitLabelKey="imageSave"
++            submitBusyLabelKey="imageSaving"
++            onCancel={toggle}
++            onSubmit={() => { void save() }}
++          />
++          {state.keyConfigured ? (
++            <div className={styles['rowActions']}>
++              <button
++                type="button"
++                className={styles['dangerButton']}
++                disabled={!writable || busy}
++                onClick={() => { void clearKey() }}
++              >
++                {t('imageClearKey')}
++              </button>
++            </div>
++          ) : null}
++        </div>
++      ) : null}
++    </div>
++  )
++}
+diff --git a/packages/client/ui-settings-models/src/client/index.ts b/packages/client/ui-settings-models/src/client/index.ts
+index bf3c7e13..f0934ecd 100644
+--- a/packages/client/ui-settings-models/src/client/index.ts
++++ b/packages/client/ui-settings-models/src/client/index.ts
+@@ -22,6 +22,8 @@ import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
+ import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
+ import { WelcomeNotice } from './WelcomeNotice.tsx'
+ import type { WelcomeNoticeInjected } from './WelcomeNotice.tsx'
++import { ImageServiceCard } from './bloop/ImageServiceCard.tsx'
++import type { ImageServiceInjected, ImageServiceState } from './bloop/ImageServiceCard.tsx'
+ import { WelcomeNoticeStore } from './welcome-store.ts'
+ import { ModelsSettingsStore } from './store.ts'
+ import { createModelsOperations } from './operations.ts'
+@@ -44,6 +46,20 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
+ /** Dictionary namespace owned by this plugin. */
+ const NS = 'settings.models'
+ 
++/**
++ * Credential references this machine's own image-service endpoint and key are
++ * stored under. All three ride the same credential seam (`$DSH_HOME/.credentials.yaml`,
++ * 0600, hot-reloaded, never returned), so the editor is write-only: opening it
++ * shows blanks, a blank field keeps the stored value, and the closed row shows
++ * presence dots rather than echoing anything back. The endpoint (address + model)
++ * deliberately shares this seam rather than the settings namespace because the
++ * business plugin's entry is `insert`ed by a home patch, whose composed name the
++ * config-editor refuses to write through; the credential seam has no such seam.
++ */
++const IMAGE_BASEURL_REF = 'GZH_IMAGE_BASEURL'
++const IMAGE_MODEL_REF = 'GZH_IMAGE_MODEL'
++const IMAGE_KEY_REF = 'GZH_IMAGE_KEY'
++
+ export type {
+   ModelsSettingsState, ProviderDirectoryEntry, ProviderRow,
+ } from './store.ts'
+@@ -157,4 +173,50 @@ export function apply(ctx: ClientContext): void {
+     order: 0,
+     inject: deepSeekOnboardingInjected,
+   }, DeepSeekOnboardingDialog))
++
++  // Bloop-only: the image-service endpoint card, seated in the Models footer
++  // extension slot so the section keeps sole ownership of its provider rows.
++  // Address, model, and key all ride the credential seam under this machine's
++  // own references; the seam never returns a value, so the card shows presence
++  // dots and its editor is write-only. Callbacks are bound once here, where the
++  // Remote namespaces are declared in this plugin's own `inject`.
++  if (process.env.DSH_CLIENT_BLOOP === '1') {
++    // Built once so every callback keeps a stable identity: the card's read
++    // effect depends on `read`, and a fresh face per owner render would re-run it.
++    const imageService: ImageServiceInjected = {
++      read: async (): Promise<ImageServiceState> => {
++        const keys = await ctx.remote.credentials.describe([
++          IMAGE_BASEURL_REF, IMAGE_MODEL_REF, IMAGE_KEY_REF,
++        ])
++        if (!keys.ok) {
++          return { available: false, keyConfigured: false, endpointConfigured: false, message: keys.error.message }
++        }
++        const info = keys.value
++        // A credential write needs the seam to be writable here; every reference
++        // reports the same seam, so any one of them answers availability.
++        const available = info[IMAGE_KEY_REF]?.writable !== false
++        return {
++          available,
++          keyConfigured: info[IMAGE_KEY_REF]?.configured === true,
++          endpointConfigured: info[IMAGE_BASEURL_REF]?.configured === true
++            && info[IMAGE_MODEL_REF]?.configured === true,
++          message: undefined,
++        }
++      },
++      saveEndpoint: async (baseUrl, model) => {
++        const endpointFailure = await operations.storeCredential(IMAGE_BASEURL_REF, baseUrl)
++        if (endpointFailure !== undefined) return endpointFailure
++        return operations.storeCredential(IMAGE_MODEL_REF, model)
++      },
++      storeKey: value => operations.storeCredential(IMAGE_KEY_REF, value),
++      removeKey: () => operations.removeCredential(IMAGE_KEY_REF),
++      t,
++    }
++    ctx.slots.inject('settings.models.footer', () => ctx.slots.register({
++      name: 'settings.models.footer',
++      id: 'bloop-image-service',
++      order: 100,
++      inject: () => imageService,
++    }, ImageServiceCard))
++  }
+ }
+diff --git a/packages/client/ui-settings-models/src/client/locales.ts b/packages/client/ui-settings-models/src/client/locales.ts
+index 9bcfa18e..9b27769c 100644
+--- a/packages/client/ui-settings-models/src/client/locales.ts
++++ b/packages/client/ui-settings-models/src/client/locales.ts
+@@ -136,6 +136,27 @@ export const en = {
+   onboardingSave: 'Save and continue',
+   onboardingSaving: 'Saving…',
+   keyRequired: 'Enter an API key to continue.',
++  imageTitle: 'Article image service',
++  imageTag: 'Bring your own key',
++  imageIntro: 'Bloop generates article illustrations and covers through your own image service. Set its address and model here, and store a key that pays for your generations.',
++  imageConfigure: 'Configure',
++  imageBaseUrl: 'Service URL',
++  imageBaseUrlPlaceholder: 'https://ark.cn-beijing.volces.com/api/v3',
++  imageModel: 'Model name',
++  imageModelPlaceholder: 'doubao-seedream-5-0-flash-260915',
++  imageKeyHint: 'The key is stored on this machine and never read back. Leave it blank to keep the stored one.',
++  imageKeyConfigured: 'Image API key configured',
++  imageKeyMissing: 'Image API key missing',
++  imageEndpointConfigured: 'Image endpoint configured',
++  imageEndpointMissing: 'Image endpoint missing',
++  imageSave: 'Save',
++  imageSaving: 'Saving…',
++  imageSaved: 'Saved.',
++  imageClearKey: 'Remove key',
++  imageBaseUrlInvalid: 'Enter a valid HTTP or HTTPS URL.',
++  imageNeedsFields: 'Enter the key, or both the service URL and the model name. Blank fields keep what is stored.',
++  imageNeedsBothEndpoint: 'Enter both the service URL and the model name, or leave both blank.',
++  imageUnavailable: 'This deployment cannot write the image-service values, so they cannot be edited here.',
+ }
+ 
+ /** The settings.models namespace key union. */
+@@ -277,4 +298,25 @@ export const zh: { [Key in keyof typeof en]: string } = {
+   onboardingSave: '保存并继续',
+   onboardingSaving: '保存中…',
+   keyRequired: '请输入 API 密钥后继续。',
++  imageTitle: '生图服务',
++  imageTag: '自带密钥',
++  imageIntro: 'Bloop 通过你自己的生图服务生成正文配图与封面。在此填写服务地址与模型，并保存一把为本机生成图片付费的密钥。',
++  imageConfigure: '配置',
++  imageBaseUrl: '服务地址',
++  imageBaseUrlPlaceholder: 'https://ark.cn-beijing.volces.com/api/v3',
++  imageModel: '模型名称',
++  imageModelPlaceholder: 'doubao-seedream-5-0-flash-260915',
++  imageKeyHint: '密钥保存在本机、永不回显。留空即保持已存储的密钥。',
++  imageKeyConfigured: '生图密钥已配置',
++  imageKeyMissing: '生图密钥未配置',
++  imageEndpointConfigured: '生图服务地址已配置',
++  imageEndpointMissing: '生图服务地址未配置',
++  imageSave: '保存',
++  imageSaving: '保存中…',
++  imageSaved: '已保存。',
++  imageClearKey: '移除密钥',
++  imageBaseUrlInvalid: '请输入有效的 HTTP 或 HTTPS 地址。',
++  imageNeedsFields: '请填写密钥，或同时填写服务地址与模型名称；留空的项保持已存储的值。',
++  imageNeedsBothEndpoint: '请同时填写服务地址与模型名称，或两者都留空。',
++  imageUnavailable: '当前部署无法写入生图服务配置，无法在此编辑。',
+ }
 diff --git a/packages/client/ui-sidebar/README.i18n.yaml b/packages/client/ui-sidebar/README.i18n.yaml
 index da1a7525..ab058ed8 100644
 --- a/packages/client/ui-sidebar/README.i18n.yaml
