@@ -6,7 +6,7 @@
 
 ## 现在怎么运行
 
-本机已经安装依赖并配置主模型。双击上级目录的 **Bloop.app** 即可打开修改后的桌面界面，已完成正常退出后由系统直接打开的冷启动验证。也可以双击 **启动Bloop.command**，或在此目录运行 `npm start`。这些入口均加载本项目的独立配置。上级目录的原版 `DeepSeek Harness.app` 提供本地运行环境，请保留。
+在已安装依赖并配置主模型的环境中，双击上级目录的 **Bloop.app**​ 即可打开修改后的桌面界面。也可以双击 **启动Bloop.command**，或在此目录运行 `npm start`。这些入口均加载本项目的独立配置。上级目录的原版 `DeepSeek Harness.app` 提供本地运行环境，请保留。
 
 macOS 应用直接从已签名的 Electron 主程序启动，主应用和辅助进程使用 Bloop 名称与独立标识；权限用途说明也使用 Bloop。继续使用原有 data 目录、历史与模型配置。系统可能为修正后的身份重新申请授权，旧 dsh 授权记录不会被自动清除。
 
@@ -72,11 +72,22 @@ macOS 应用直接从已签名的 Electron 主程序启动，主应用和辅助�
 
 `data/settings.json` 为本机私有配置，权限 0600，整个 `data/` 已被 Git 忽略。共享项目时使用无密钥的 `settings.example.json`，复制到 `data/settings.json` 后填写自己的凭据。
 
+文件格式如下：
+```json
+{
+  "main": { "baseUrl": "https://api.deepseek.com/v1", "model": "deepseek-flash", "apiKey": "" },
+  "vision": { "baseUrl": "", "model": "", "apiKey": "" },
+  "image": { "baseUrl": "", "model": "", "apiKey": "" }
+}
+```
+
 - `main`：主模型，当前为 DeepSeek `deepseek-flash`。
 - `vision`：留空继承主模型，可另外指定支持视觉输入的兼容接口。
-- `image`：独立生图服务的 `baseUrl`、`model`、`apiKey`。DeepSeek 主模型 API Key 不等于已配置生图服务。
+- `image`：独立生图服务的 `baseUrl`、`model`、`apiKey`。DeepSeek 主模型 API Key 不等于已配置生图服务。未配置生图模型时，仍可输入文本并得到排版后的文章，但无法启用 AI 生图功能，文中仅含排版文字。
 
 生图端支持 OpenAI 兼容的 `POST <baseUrl>/images/generations`、1024×1024，响应可为 `data[0].b64_json`（如 DeepInfra）或 `data[0].url`（如火山方舟 Seedream 返回 jpg 链接）。URL 型响应经受控下载器获取：仅公共 HTTP(S)、DNS 固定、禁私网保留段、5 MB 上限、60 秒超时。可用 `npm run check:image` 做一次真实连通性与生图测试（不回显密钥）。没有配置时会返回明确错误，不能以占位图冒充生成成功。
+
+**修改 `data/settings.json` 后保存文件，重启应用（Windows 为 `启动Bloop.cmd`）生效。如需移除本机生图密钥，运行 `npm run setup:image -- --clear` 。**
 
 ### 生图密钥自带（BYOK，各付各的）
 
@@ -155,7 +166,7 @@ Windows 入口是仓库根目录的 `启动Bloop.cmd`。这是首次运行会构
 
 脚本会安装业务依赖，拉取 `harness.json` 固定的源码版本，应用 `patches/bloop-harness.patch`，编译 Bloop 前端并准备 Windows Electron 与原生运行环境，再打开桌面窗口。后续同目录启动复用构建。目录移动时重新构建；构建失败保留日志，不会删除用户配置。已有旧补丁缓存不会被强行覆盖：升级源码包后若补丁检查不通过，先退出应用，将 data/harness-source 改名备份，再启动以重新准备；data/desktop-home 中的历史和 data/settings.json 不受影响。
 
-Windows 私有配置、模型凭据、历史和编译缓存均在 `data/`，不提交到 Git。首次启动可在设置 → 模型中配置自己的服务；生图服务建议运行 `npm run setup:image` 填入自己的密钥（存入本机凭据库，各付各的），额外识图服务仍可在 `data/settings.json` 配置。不要将 Mac 的 `data/` 或 `node_modules/` 复制到 Windows。
+Windows 私有配置、模型凭据、历史和编译缓存均在 `data/`，不提交到 Git。首次启动可在设置 → 模型中配置自己的服务；生图服务建议运行 `npm run setup:image` 填入自己的密钥（存入本机凭据库，各付各的），额外识图服务仍可在 `data/settings.json` 配置。不要将 Mac 的 `data/` 或 `node_modules/` 复制到 Windows，Windows 下也可直接编辑 `data/settings.json` 填写模型与密钥，格式见「模型和密钥」章节。
 
 GitHub Actions 的 `Bloop Windows` 工作流在 Windows x64 上执行业务测试、原生构建和桌面窗口启动检查，通过后上传 `Bloop-Windows-x64-source`。该 ZIP 是无密钥源码启动包，不是预编译安装包；下载后仍需上述首次准备。工作流通过只证明构建和开窗，不等于 Windows 上真实模型对话、图片生成或公众号复制的端到端验收。
 
